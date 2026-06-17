@@ -1,0 +1,12 @@
+python_backend/uploads/
+python_backend/temp_frames/
+python_backend/saved_tigers/
+python_backend/captured_frames/
+python_backend/reports/
+python_backend/pdf_reports/
+*.jpg
+*.jpeg
+*.png
+*.mp4
+*.pdf
+*.class

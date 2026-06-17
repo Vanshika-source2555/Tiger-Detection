@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tiger Detection Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="topbar">
+        <button class="menu-btn" onclick="toggleMenu()">☰</button>
+        <h2>Tiger Detection Monitoring System</h2>
+        <span id="userText">Welcome</span>
+    </div>
+
+    <div id="sideMenu" class="side-menu">
+        <h3>MENU</h3>
+        <button onclick="selectPhoto()">Upload Photo</button>
+        <button onclick="selectVideo()">Upload Video</button>
+        <button onclick="runLiveCamera()">Live Camera</button>
+        <button onclick="openFullscreen()">Full Screen Preview</button>
+        <button onclick="loadHistory()">History</button>
+        <button onclick="loadStats()">Statistics</button>
+        <button onclick="loadCapturedFrames()">Captured Frames</button>
+        <button onclick="loadTigerImages()">Tiger Screenshots</button>
+        <button onclick="showLatestTiger()">Latest Tiger Image</button>
+        <button onclick="openTextReport()">Text Report</button>
+        <button onclick="loadPdfReports()">PDF Reports</button>
+        <button onclick="openGraph()">Graph</button>
+        <button onclick="logout()">Logout</button>
+    </div>
+
+    <main class="dashboard">
+        <input type="file" id="photoInput" accept="image/*" hidden onchange="uploadPhoto()">
+        <input type="file" id="videoInput" accept="video/*" hidden onchange="uploadVideo()">
+
+        <section class="preview-card">
+            <img id="imagePreview" class="preview-media" style="display:none;">
+            <video id="videoPreview" class="preview-media" controls style="display:none;"></video>
+            <div id="emptyPreview" class="empty-preview">Preview Area</div>
+        </section>
+
+        <section class="result-card">
+            <div id="loader" class="loader" style="display:none;"></div>
+            <pre id="resultBox">Result: Waiting...</pre>
+        </section>
+
+        <section class="search-card">
+            <input id="searchText" placeholder="Search history by date/result/type">
+            <button onclick="searchHistory()">Search</button>
+        </section>
+
+        <section id="gallery" class="gallery"></section>
+    </main>
+
+    <div id="toast" class="toast"></div>
+    <script src="/static/script.js"></script>
+</body>
+</html>
