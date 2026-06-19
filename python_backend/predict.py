@@ -7,7 +7,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
 
 IMAGE_SIZE = (64, 64)
-
 model = None
 
 if os.path.exists(MODEL_PATH):
@@ -51,13 +50,12 @@ def predict_image(image_path):
             tiger_index = classes.index(1)
             tiger_confidence = probabilities[tiger_index] * 100
 
-            if tiger_confidence >= 10 or prediction == 1:
-             return "Tiger", round(float(tiger_confidence), 2)
+            if prediction == 1 or tiger_confidence >= 25:
+                return "Tiger", round(float(tiger_confidence), 2)
 
-        non_tiger_confidence = max(probabilities) * 100
-        return "Non-Tiger", round(float(non_tiger_confidence), 2)
+        return "Non-Tiger", 0.0
 
     if prediction == 1 or str(prediction).lower() == "tiger":
-        return "Tiger", 80.0
+        return "Tiger", 0.0
 
-    return "Non-Tiger", 80.0
+    return "Non-Tiger", 0.0

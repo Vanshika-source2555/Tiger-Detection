@@ -5,7 +5,8 @@ import numpy as np
 from datetime import datetime
 import matplotlib.pyplot as plt
 from reportlab.pdfgen import canvas
-
+from stripe_match import save_new_stripe
+from stripe_match import identify_tiger
 from predict import predict_image
 
 from database import (
@@ -39,7 +40,28 @@ from server.health_service import get_server_health
 from server.storage_service import delete_old_files
 from server.alert_service import read_alerts
 
+
 app = Flask(__name__)
+
+
+def process_detection(file_path):
+    current_time = datetime.now().strftime("%d-%m-%Y | %I:%M %p")
+
+    result = predict_image(file_path)[0]
+
+    if result == "Tiger":
+        tiger_status = identify_tiger(file_path)
+
+        return {
+            "result": "Tiger Detected",
+            "message": tiger_status,
+            "time": current_time
+        }
+
+    return {
+        "result": "No Tiger Detected",
+        "time": current_time
+    }
 
 
 @app.route("/")
@@ -175,19 +197,27 @@ def stop_camera_route():
 @app.route("/start_multi_camera", methods=["POST"])
 def start_multi_camera_route():
     cameras = {
+        # Laptop webcam
         "CAM_1": request.form.get("cam1", "0"),
-        "CAM_2": request.form.get("cam2", "videos/cam2.mp4"),
-        "CAM_3": request.form.get("cam3", "videos/cam3.mp4"),
+
+        # Mobile IP Webcam link
+        "CAM_2": request.form.get("cam2", "http://192.168.1.10:8080/video"),
+
+        # CCTV / RTSP camera link
+        "CAM_3": request.form.get("cam3", "rtsp://username:password@192.168.1.100:554/stream1"),
+
+        # Video file for testing
         "CAM_4": request.form.get("cam4", "videos/cam4.mp4")
     }
 
     messages = {}
 
     for camera_id, camera_url in cameras.items():
-        messages[camera_id] = start_camera(
-            camera_id,
-            convert_camera_url(camera_url)
-        )
+        if camera_url is not None and camera_url.strip() != "":
+            messages[camera_id] = start_camera(
+                camera_id,
+                convert_camera_url(camera_url)
+            )
 
     return jsonify({
         "success": True,
@@ -270,8 +300,7 @@ def api():
     elif action == "detect_photo":
         if "file" not in request.files:
             return jsonify({
-                "success": False,
-                "message": "No image file received"
+                "result": "No image file received"
             })
 
         file = request.files["file"]
@@ -279,39 +308,28 @@ def api():
         file_path = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(file_path)
 
-        result, confidence = predict_image(file_path)
+        output = process_detection(file_path)
 
         saved_path = ""
-        notification = "No Tiger Detected"
 
-        if result == "Tiger":
+        if output["result"] == "Tiger Detected":
             saved_path = save_tiger_image(file_path)
-            notification = "Tiger Detected in Photo"
 
         save_detection(
             username="admin",
             source_type="Photo",
             file_name=file.filename,
-            result=result,
-            confidence=confidence,
+            result=output["result"],
+            confidence=0,
             image_path=saved_path
         )
 
-        return jsonify({
-            "success": True,
-            "type": "photo",
-            "notification": notification,
-            "result": result,
-            "confidence": confidence,
-            "uploaded_file": file_path,
-            "saved_image": saved_path
-        })
+        return jsonify(output)
 
     elif action == "detect_video":
         if "file" not in request.files:
             return jsonify({
-                "success": False,
-                "message": "No video file received"
+                "result": "No video file received"
             })
 
         file = request.files["file"]
@@ -323,15 +341,13 @@ def api():
 
         if not cap.isOpened():
             return jsonify({
-                "success": False,
-                "message": "Video could not be opened"
+                "result": "Video could not be opened"
             })
 
         frame_count = 0
         checked_frames = 0
         tiger_frames = 0
         nontiger_frames = 0
-        best_confidence = 0
         best_frame_path = ""
 
         while True:
@@ -350,13 +366,12 @@ def api():
 
                 cv2.imwrite(frame_path, frame)
 
-                result, confidence = predict_image(frame_path)
+                output = process_detection(frame_path)
 
-                if result == "Tiger":
+                if output["result"] == "Tiger Detected":
                     tiger_frames += 1
 
-                    if confidence > best_confidence:
-                        best_confidence = confidence
+                    if best_frame_path == "":
                         best_frame_path = save_tiger_image(frame_path)
                 else:
                     nontiger_frames += 1
@@ -369,8 +384,7 @@ def api():
             final_result,
             checked_frames,
             tiger_frames,
-            nontiger_frames,
-            best_confidence
+            nontiger_frames
         )
 
         graph_path = create_video_graph(tiger_frames, nontiger_frames)
@@ -380,7 +394,6 @@ def api():
             checked_frames,
             tiger_frames,
             nontiger_frames,
-            best_confidence,
             graph_path
         )
 
@@ -389,24 +402,14 @@ def api():
             source_type="Video",
             file_name=file.filename,
             result=final_result,
-            confidence=best_confidence,
+            confidence=0,
             image_path=pdf_path
         )
 
         return jsonify({
-            "success": True,
-            "type": "video",
-            "notification": final_result,
             "result": final_result,
             "frames_checked": checked_frames,
-            "tiger_frames": tiger_frames,
-            "nontiger_frames": nontiger_frames,
-            "confidence": best_confidence,
-            "best_frame": best_frame_path,
-            "text_report": text_report_path,
-            "graph": graph_path,
-            "pdf_report": pdf_path,
-            "uploaded_video": video_path
+            "time": datetime.now().strftime("%d-%m-%Y %I:%M %p")
         })
 
     elif action == "live_camera":
@@ -476,8 +479,7 @@ def create_video_report(
     final_result,
     checked_frames,
     tiger_frames,
-    nontiger_frames,
-    best_confidence
+    nontiger_frames
 ):
     time_name = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_path = os.path.join(REPORT_FOLDER, "report_" + time_name + ".txt")
@@ -491,7 +493,6 @@ def create_video_report(
         f.write("Tiger Frames: " + str(tiger_frames) + "\n")
         f.write("NonTiger Frames: " + str(nontiger_frames) + "\n")
         f.write("Saved Tiger Screenshots: " + str(tiger_frames) + "\n")
-        f.write("Best Confidence: " + str(best_confidence) + "%\n")
 
     with open("report.txt", "w") as f:
         f.write("Latest Text Report: " + report_path)
@@ -520,7 +521,6 @@ def create_pdf_report(
     checked_frames,
     tiger_frames,
     nontiger_frames,
-    best_confidence,
     graph_path
 ):
     time_name = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -538,7 +538,6 @@ def create_pdf_report(
     c.drawString(100, 640, "Tiger Frames: " + str(tiger_frames))
     c.drawString(100, 610, "NonTiger Frames: " + str(nontiger_frames))
     c.drawString(100, 580, "Saved Tiger Screenshots: " + str(tiger_frames))
-    c.drawString(100, 550, "Best Confidence: " + str(best_confidence) + "%")
 
     if os.path.exists(graph_path):
         c.drawImage(graph_path, 100, 300, width=350, height=220)
@@ -549,4 +548,4 @@ def create_pdf_report(
 
 
 if __name__ == "__main__":
-   app.run(host="127.0.0.1", port=5000, debug=False, threaded=True, use_reloader=False)
+    app.run(host="127.0.0.1", port=5000, debug=False, threaded=True, use_reloader=False)

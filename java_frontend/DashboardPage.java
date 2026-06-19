@@ -279,17 +279,14 @@ public class DashboardPage extends JFrame {
         updateOneCameraCard(cam4StatusCard, response, "CAM_4");
 
         String tigerCountText = extractValue(response, "tiger_count");
-        String confidenceText = extractValue(response, "last_confidence");
         String lastResult = extractTextValue(response, "last_result");
 
         int currentTigerCount = parseIntSafe(tigerCountText, previousTigerCount);
-        double confidence = parseDoubleSafe(confidenceText, 0);
 
-        String alertKey = currentTigerCount + "_" + lastResult + "_" + confidenceText;
+        String alertKey = currentTigerCount + "_" + lastResult;
         long now = System.currentTimeMillis();
 
         if (currentTigerCount > previousTigerCount
-                && confidence >= 30
                 && !alertKey.equals(lastAlertKey)
                 && now - lastPopupTime >= 10000) {
 
@@ -297,12 +294,12 @@ public class DashboardPage extends JFrame {
 
             JOptionPane.showMessageDialog(
                     this,
-                    "TIGER DETECTED IN LIVE CAMERA!\nConfidence: " + confidenceText + "%",
+                    "🐅 Tiger Detected\n\nSighting Saved",
                     "Live Camera Alert",
                     JOptionPane.WARNING_MESSAGE);
 
             showNotification(
-                    "NEW TIGER ALERT! Confidence: " + confidenceText + "%",
+                    "🐅 Tiger Detected",
                     new Color(255, 245, 245),
                     new Color(180, 0, 0));
 
@@ -318,7 +315,6 @@ public class DashboardPage extends JFrame {
 
         String status = extractTextValue(block, "status");
         String result = extractTextValue(block, "last_result");
-        String confidence = extractValue(block, "last_confidence");
         String frames = extractValue(block, "frames_checked");
         String tigers = extractValue(block, "tiger_count");
 
@@ -333,7 +329,6 @@ public class DashboardPage extends JFrame {
                         camId + "<br>" +
                         status + "<br>" +
                         "Result: " + result + "<br>" +
-                        "Confidence: " + confidence + "%<br>" +
                         "Frames: " + frames + "<br>" +
                         "Tigers: " + tigers +
                         "</center></html>");
@@ -474,7 +469,6 @@ public class DashboardPage extends JFrame {
 
     String formatDetectionResult(String response) {
         String result = extractTextValue(response, "result");
-        String confidence = extractValue(response, "confidence");
         String notification = extractTextValue(response, "notification");
         String frames = extractValue(response, "frames_checked");
         String tigerFrames = extractValue(response, "tiger_frames");
@@ -489,9 +483,6 @@ public class DashboardPage extends JFrame {
 
         if (!result.equals(""))
             text += "Result       : " + result + "\n";
-
-        if (!confidence.equals("0"))
-            text += "Confidence   : " + confidence + "%\n";
 
         if (!frames.equals("0"))
             text += "Frames Checked : " + frames + "\n";

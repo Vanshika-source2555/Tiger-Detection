@@ -174,11 +174,11 @@ def get_history():
         if not rows:
             return "No history found"
 
-        text = "User | Source | File | Result | Confidence | Time\n"
+        text = "User | Source | File | Result | Time\n"
         text += "-" * 90 + "\n"
 
         for row in rows:
-            text += f"{row[0]} | {row[1]} | {row[2]} | {row[3]} | {row[4]} | {row[5]}\n"
+            text += f"{row[0]} | {row[1]} | {row[2]} | {row[3]} | {row[5]}\n"
 
         return text
 

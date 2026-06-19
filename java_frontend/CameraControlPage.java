@@ -24,9 +24,9 @@ public class CameraControlPage extends JFrame {
         add(title);
 
         cam1 = addCameraRow("CAM_1", 80, "0");
-        cam2 = addCameraRow("CAM_2", 140, "videos/cam2.mp4");
-        cam3 = addCameraRow("CAM_3", 200, "videos/cam3.mp4");
-        cam4 = addCameraRow("CAM_4", 260, "videos/cam4.mp4");
+        cam2 = addCameraRow("CAM_2", 140, "http://192.168.1.10:8080/video");
+        cam3 = addCameraRow("CAM_3", 200, "rtsp://username:password@192.168.1.100:554/stream1");
+        cam4 = addCameraRow("CAM_4", 260, "videos/test.mp4");
 
         JButton detectSavedFrame = new JButton("Detect Saved Frame");
         detectSavedFrame.setBounds(250, 315, 200, 35);
@@ -43,7 +43,7 @@ public class CameraControlPage extends JFrame {
         styleButton(stopAll);
         add(stopAll);
 
-        resultArea = new JTextArea();
+        resultArea = new JTextArea("Camera System Ready");
         resultArea.setEditable(false);
         resultArea.setFont(new Font("Segoe UI", Font.BOLD, 13));
         resultArea.setLineWrap(true);
@@ -86,7 +86,7 @@ public class CameraControlPage extends JFrame {
                     "camera_id=" + dashboard.encode(cameraId) +
                             "&camera_url=" + dashboard.encode(source.getText().trim()));
 
-            resultArea.setText("Started " + cameraId + ":\n" + response);
+            resultArea.setText(cameraId + " Started");
             dashboard.updateCameraStatus();
         });
 
@@ -95,7 +95,7 @@ public class CameraControlPage extends JFrame {
                     "http://127.0.0.1:5000/stop_camera",
                     "camera_id=" + dashboard.encode(cameraId));
 
-            resultArea.setText("Stopped " + cameraId + ":\n" + response);
+            resultArea.setText(cameraId + " Stopped");
             dashboard.updateCameraStatus();
         });
 
@@ -108,20 +108,16 @@ public class CameraControlPage extends JFrame {
                 "&cam3=" + dashboard.encode(cam3.getText().trim()) +
                 "&cam4=" + dashboard.encode(cam4.getText().trim());
 
-        String response = dashboard.callPostApi(
-                "http://127.0.0.1:5000/start_multi_camera",
-                data);
+        dashboard.callPostApi("http://127.0.0.1:5000/start_multi_camera", data);
 
-        resultArea.setText("Start All Cameras:\n" + response);
+        resultArea.setText("Camera Monitoring Started");
         dashboard.updateCameraStatus();
     }
 
     void stopAll() {
-        String response = dashboard.callPostApi(
-                "http://127.0.0.1:5000/stop_multi_camera",
-                "");
+        dashboard.callPostApi("http://127.0.0.1:5000/stop_multi_camera", "");
 
-        resultArea.setText("Stop All Cameras:\n" + response);
+        resultArea.setText("Camera Monitoring Stopped");
         dashboard.updateCameraStatus();
     }
 
@@ -135,7 +131,7 @@ public class CameraControlPage extends JFrame {
         String choice = (String) JOptionPane.showInputDialog(
                 this,
                 "Choose frame folder:",
-                "Manual Server-Based Detection",
+                "Manual Detection",
                 JOptionPane.PLAIN_MESSAGE,
                 null,
                 options,
@@ -162,33 +158,22 @@ public class CameraControlPage extends JFrame {
         if (option == JFileChooser.APPROVE_OPTION) {
             File selectedFrame = chooser.getSelectedFile();
 
-            resultArea.setText("Sending selected frame to server...\nPlease wait.");
+            resultArea.setText("Checking selected frame...");
 
             String response = ApiClient.sendFile("detect_photo", selectedFrame);
 
-            resultArea.setText(
-                    "Manual Server-Based Frame Detection\n\n"
-                            + "Selected Frame: " + selectedFrame.getName()
-                            + "\nFolder: " + folderPath
-                            + "\n\nServer Response:\n"
-                            + response);
+            resultArea.setText(response);
         }
     }
 
     void styleButton(JButton button) {
         button.setBackground(Color.WHITE);
         button.setForeground(Color.BLACK);
-
         button.setOpaque(true);
         button.setContentAreaFilled(true);
         button.setBorderPainted(true);
         button.setFocusPainted(false);
-
         button.setFont(new Font("Segoe UI", Font.BOLD, 13));
-
-        button.setBorder(
-                BorderFactory.createLineBorder(
-                        new Color(0, 105, 180),
-                        2));
+        button.setBorder(BorderFactory.createLineBorder(new Color(0, 105, 180), 2));
     }
 }
