@@ -8,7 +8,7 @@ from reportlab.pdfgen import canvas
 from stripe_match import save_new_stripe
 from stripe_match import identify_tiger
 from predict import predict_image
-
+from ai_assistant import ai_chat_answer
 from database import (
     signup_user,
     login_user,
@@ -545,7 +545,14 @@ def create_pdf_report(
     c.save()
 
     return pdf_path
+@app.route("/ai_chat", methods=["POST"])
+def ai_chat():
 
+    question = request.form.get("question", "")
+
+    answer = ai_chat_answer(question)
+
+    return answer
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5000, debug=False, threaded=True, use_reloader=False)

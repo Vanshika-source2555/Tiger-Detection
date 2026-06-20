@@ -69,6 +69,11 @@ def identify_tiger(image_path):
     save_database(database)
 
     return "New Tiger Recorded"
-    save_database(database)
 
-    return "New Tiger Recorded"
+
+def save_new_stripe(image_path):
+    """
+    Compatibility function for app.py.
+    It saves a new tiger stripe record if not already matched.
+    """
+    return identify_tiger(image_path)

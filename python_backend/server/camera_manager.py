@@ -60,14 +60,14 @@ def detect_tiger_multi_crop(frame, camera_id):
     h, w, _ = frame.shape
 
     crops = [
-        frame,                                      # full frame
-        frame[h // 4: 3 * h // 4, w // 4: 3 * w // 4],  # center
-        frame[h // 4: 3 * h // 4, 0: w // 2],      # left
-        frame[h // 4: 3 * h // 4, w // 2: w],      # right
-        frame[h // 2: h, 0: w // 2],               # bottom left
-        frame[h // 2: h, w // 2: w],               # bottom right
-        frame[0: h // 2, 0: w // 2],               # top left
-        frame[0: h // 2, w // 2: w]                # top right
+        frame,
+        frame[h // 4: 3 * h // 4, w // 4: 3 * w // 4],
+        frame[h // 4: 3 * h // 4, 0: w // 2],
+        frame[h // 4: 3 * h // 4, w // 2: w],
+        frame[h // 2: h, 0: w // 2],
+        frame[h // 2: h, w // 2: w],
+        frame[0: h // 2, 0: w // 2],
+        frame[0: h // 2, w // 2: w]
     ]
 
     for i, crop in enumerate(crops):
@@ -91,13 +91,11 @@ def detect_tiger_multi_crop(frame, camera_id):
 
 
 def final_tiger_detection(frame, camera_id):
-    # Step 1: check full frame
     full_result = detect_tiger_full_frame(frame, camera_id)
 
     if full_result == "Tiger":
         return "Tiger"
 
-    # Step 2: if full frame fails, check crops
     crop_result = detect_tiger_multi_crop(frame, camera_id)
 
     if crop_result == "Tiger":
@@ -112,23 +110,31 @@ def camera_worker(camera_id, camera_url):
         "source": str(camera_url),
         "last_result": "None",
         "frames_checked": 0,
-        "tiger_count": 0,
-        "last_alert_time": "No alert yet"
+        "last_alert_time": "No alert yet",
+        "ai_summary": "Monitoring not started yet.",
+        "ai_suggestion": "Start camera to begin live tiger detection.",
+        "ai_decision": "User should monitor the result."
     }
 
     cap = open_camera(camera_url)
 
     if not cap.isOpened():
         camera_status[camera_id]["status"] = "Offline"
+        camera_status[camera_id]["last_result"] = "Camera Offline"
+        camera_status[camera_id]["ai_summary"] = "Camera could not be opened."
+        camera_status[camera_id]["ai_suggestion"] = "Check camera source, permissions, IP/RTSP URL, and backend logs."
+        camera_status[camera_id]["ai_decision"] = "Restart camera after fixing the source."
         print(camera_id, "camera could not open:", camera_url)
         return
 
     camera_status[camera_id]["status"] = "Online"
+    camera_status[camera_id]["ai_summary"] = "Live monitoring is active."
+    camera_status[camera_id]["ai_suggestion"] = "Continue monitoring camera feed."
+    camera_status[camera_id]["ai_decision"] = "No action required right now."
 
     last_processed_time = 0
     last_alert_time = 0
     checked_frames = 0
-    tiger_count = 0
 
     while camera_status[camera_id]["status"] == "Online":
         success, frame = cap.read()
@@ -140,6 +146,10 @@ def camera_worker(camera_id, camera_url):
 
             if not success:
                 camera_status[camera_id]["status"] = "Disconnected"
+                camera_status[camera_id]["last_result"] = "Camera Disconnected"
+                camera_status[camera_id]["ai_summary"] = "Camera stream disconnected."
+                camera_status[camera_id]["ai_suggestion"] = "Check camera connection, source URL, and restart the camera."
+                camera_status[camera_id]["ai_decision"] = "User should verify the camera source."
                 print(camera_id, "disconnected")
                 break
 
@@ -165,13 +175,14 @@ def camera_worker(camera_id, camera_url):
                 result = "Error"
 
             if result == "Tiger":
-                camera_status[camera_id]["last_result"] = "Tiger"
+                camera_status[camera_id]["last_result"] = "Tiger Detected"
+                camera_status[camera_id]["ai_summary"] = "Tiger detected successfully."
+                camera_status[camera_id]["ai_suggestion"] = "Review saved image and check nearby cameras."
+                camera_status[camera_id]["ai_decision"] = "Continue monitoring. Final action should be taken by user."
 
                 if current_time - last_alert_time >= ALERT_COOLDOWN_SECONDS:
                     last_alert_time = current_time
-                    tiger_count += 1
 
-                    camera_status[camera_id]["tiger_count"] = tiger_count
                     camera_status[camera_id]["last_alert_time"] = str(datetime.now())
 
                     saved_path = save_frame(frame, SAVED_TIGER_FOLDER, camera_id)
@@ -195,22 +206,46 @@ def camera_worker(camera_id, camera_url):
 
             elif result == "No Tiger Detected":
                 camera_status[camera_id]["last_result"] = "No Tiger Detected"
+                camera_status[camera_id]["ai_summary"] = "No tiger detected in the current frame."
+                camera_status[camera_id]["ai_suggestion"] = "Continue monitoring."
+                camera_status[camera_id]["ai_decision"] = "No immediate action required."
 
             else:
                 camera_status[camera_id]["last_result"] = result
+                camera_status[camera_id]["ai_summary"] = "Detection issue occurred."
+                camera_status[camera_id]["ai_suggestion"] = "Check backend logs and model status."
+                camera_status[camera_id]["ai_decision"] = "User should verify the system."
 
             print(
                 camera_id,
                 "Status:",
                 camera_status[camera_id]["last_result"],
                 "Frames:",
-                checked_frames,
-                "Tiger Count:",
-                tiger_count
+                checked_frames
             )
 
     cap.release()
-    camera_status[camera_id]["status"] = "Stopped"
+
+    if camera_id in camera_status:
+        camera_status[camera_id]["status"] = "Stopped"
+
+        if camera_status[camera_id].get("last_result", "") in ["None", ""]:
+            camera_status[camera_id]["last_result"] = "Stopped"
+
+        camera_status[camera_id]["ai_summary"] = camera_status[camera_id].get(
+            "ai_summary",
+            "Camera stopped."
+        )
+
+        camera_status[camera_id]["ai_suggestion"] = camera_status[camera_id].get(
+            "ai_suggestion",
+            "Review last result."
+        )
+
+        camera_status[camera_id]["ai_decision"] = camera_status[camera_id].get(
+            "ai_decision",
+            "User should verify final result."
+        )
 
 
 def start_camera(camera_id, camera_url):
@@ -235,6 +270,18 @@ def stop_camera(camera_id):
         return f"{camera_id} not found"
 
     camera_status[camera_id]["status"] = "Stopped"
+
+    if camera_status[camera_id].get("last_result", "") in ["", "None"]:
+        camera_status[camera_id]["last_result"] = "Stopped"
+
+    if camera_status[camera_id].get("ai_summary", "") == "":
+        camera_status[camera_id]["ai_summary"] = "Camera stopped."
+
+    if camera_status[camera_id].get("ai_suggestion", "") == "":
+        camera_status[camera_id]["ai_suggestion"] = "Review last camera result."
+
+    if camera_status[camera_id].get("ai_decision", "") == "":
+        camera_status[camera_id]["ai_decision"] = "User should verify final status."
 
     if camera_id in latest_frames:
         del latest_frames[camera_id]

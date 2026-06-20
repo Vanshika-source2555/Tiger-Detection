@@ -84,19 +84,19 @@ public class DashboardPage extends JFrame {
         scroll.setBounds(270, 510, 650, 180);
         add(scroll);
 
-        cam1StatusCard = createCard("CAM_1<br>Stopped<br>Frames: 0<br>Tigers: 0");
+        cam1StatusCard = createCard("CAM_1<br>Stopped<br>Result: None<br>Frames: 0");
         cam1StatusCard.setBounds(945, 90, 190, 85);
         add(cam1StatusCard);
 
-        cam2StatusCard = createCard("CAM_2<br>Stopped<br>Frames: 0<br>Tigers: 0");
+        cam2StatusCard = createCard("CAM_2<br>Stopped<br>Result: None<br>Frames: 0");
         cam2StatusCard.setBounds(945, 185, 190, 85);
         add(cam2StatusCard);
 
-        cam3StatusCard = createCard("CAM_3<br>Stopped<br>Frames: 0<br>Tigers: 0");
+        cam3StatusCard = createCard("CAM_3<br>Stopped<br>Result: None<br>Frames: 0");
         cam3StatusCard.setBounds(945, 280, 190, 85);
         add(cam3StatusCard);
 
-        cam4StatusCard = createCard("CAM_4<br>Stopped<br>Frames: 0<br>Tigers: 0");
+        cam4StatusCard = createCard("CAM_4<br>Stopped<br>Result: None<br>Frames: 0");
         cam4StatusCard.setBounds(945, 375, 190, 85);
         add(cam4StatusCard);
 
@@ -115,6 +115,39 @@ public class DashboardPage extends JFrame {
         });
 
         startAutoRefresh();
+
+        // ===== AI Button =====
+        JButton aiButton = new JButton("AI");
+
+        aiButton.setBounds(1080, 650, 65, 65);
+
+        aiButton.setBackground(
+                new Color(0, 120, 215));
+
+        aiButton.setForeground(Color.WHITE);
+
+        aiButton.setFont(
+                new Font(
+                        "Segoe UI",
+                        Font.BOLD,
+                        18));
+
+        aiButton.setFocusPainted(false);
+
+        aiButton.setBorder(
+                BorderFactory.createLineBorder(
+                        Color.WHITE,
+                        2));
+
+        add(aiButton);
+
+        // Open AI Sidebar
+        aiButton.addActionListener(e -> {
+
+            new AIAssistantPage(this);
+
+        });
+
         setVisible(true);
     }
 
@@ -197,7 +230,17 @@ public class DashboardPage extends JFrame {
             resultArea.setText("Processing selected captured frame...\nPlease wait...");
 
             String response = ApiClient.sendFile("detect_photo", selectedFrame);
-            resultArea.setText(formatDetectionResult(response));
+            String formatted = formatDetectionResult(response);
+
+            String result = extractTextValue(response, "result");
+            String notification = extractTextValue(response, "notification");
+
+            String aiDecision = getAIDecision(result, notification);
+
+            resultArea.setText(
+                    formatted +
+                            "\n\n========== AI DECISION SUPPORT ==========\n\n" +
+                            aiDecision);
 
             if (isTigerDetected(response)) {
                 playAlarm();
@@ -277,7 +320,7 @@ public class DashboardPage extends JFrame {
         updateOneCameraCard(cam2StatusCard, response, "CAM_2");
         updateOneCameraCard(cam3StatusCard, response, "CAM_3");
         updateOneCameraCard(cam4StatusCard, response, "CAM_4");
-
+        updateResultAreaFromCameraStatus(response);
         String tigerCountText = extractValue(response, "tiger_count");
         String lastResult = extractTextValue(response, "last_result");
 
@@ -316,7 +359,13 @@ public class DashboardPage extends JFrame {
         String status = extractTextValue(block, "status");
         String result = extractTextValue(block, "last_result");
         String frames = extractValue(block, "frames_checked");
-        String tigers = extractValue(block, "tiger_count");
+        card.setText(
+                "<html><center>" +
+                        camId + "<br>" +
+                        status + "<br>" +
+                        "Result: " + result + "<br>" +
+                        "Frames: " + frames +
+                        "</center></html>");
 
         if (status.equals(""))
             status = "Stopped";
@@ -330,7 +379,7 @@ public class DashboardPage extends JFrame {
                         status + "<br>" +
                         "Result: " + result + "<br>" +
                         "Frames: " + frames + "<br>" +
-                        "Tigers: " + tigers +
+
                         "</center></html>");
 
         if (result.equalsIgnoreCase("Tiger")) {
@@ -426,7 +475,17 @@ public class DashboardPage extends JFrame {
             resultArea.setText("Processing...\nPlease wait...");
 
             String response = ApiClient.sendFile(action, lastSelectedFile);
-            resultArea.setText(formatDetectionResult(response));
+            String formatted = formatDetectionResult(response);
+
+            String result = extractTextValue(response, "result");
+            String notification = extractTextValue(response, "notification");
+
+            String aiDecision = getAIDecision(result, notification);
+
+            resultArea.setText(
+                    formatted +
+                            "\n\n========== AI DECISION SUPPORT ==========\n\n" +
+                            aiDecision);
 
             if (isTigerDetected(response)) {
                 playAlarm();
@@ -739,5 +798,50 @@ public class DashboardPage extends JFrame {
         button.setFocusPainted(false);
         button.setFont(new Font("Segoe UI", Font.BOLD, 12));
         button.setBorder(BorderFactory.createLineBorder(new Color(0, 105, 180), 2));
+    }
+
+    String getAIDecision(String result, String message) {
+        return callPostApi(
+                "http://127.0.0.1:5000/ai_decision",
+                "result=" + encode(result) + "&message=" + encode(message));
+    }
+
+    void updateResultAreaFromCameraStatus(String response) {
+
+        String[] cams = { "CAM_1", "CAM_2", "CAM_3", "CAM_4" };
+
+        for (String camId : cams) {
+
+            String block = getCameraBlock(response, camId);
+
+            String status = extractTextValue(block, "status");
+            String result = extractTextValue(block, "last_result");
+            String frames = extractValue(block, "frames_checked");
+            String summary = extractTextValue(block, "ai_summary");
+            String suggestion = extractTextValue(block, "ai_suggestion");
+            String decision = extractTextValue(block, "ai_decision");
+
+            if (result.equals("") || result.equalsIgnoreCase("None")) {
+                continue;
+            }
+
+            resultArea.setText(
+                    "========== LIVE CAMERA RESULT ==========\n\n" +
+                            "Camera      : " + camId + "\n" +
+                            "Status      : " + status + "\n" +
+                            "Last Result : " + result + "\n" +
+                            "Frames      : " + frames + "\n\n" +
+
+                            "========== AI SUMMARY ==========\n\n" +
+                            (summary.equals("") ? "Monitoring status updated." : summary) + "\n\n" +
+
+                            "========== AI SUGGESTION ==========\n\n" +
+                            (suggestion.equals("") ? "Continue monitoring." : suggestion) + "\n\n" +
+
+                            "========== AI DECISION SUPPORT ==========\n\n" +
+                            (decision.equals("") ? "Final action should be taken by user." : decision));
+
+            break;
+        }
     }
 }
