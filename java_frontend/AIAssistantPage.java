@@ -3,76 +3,132 @@ import java.awt.*;
 
 public class AIAssistantPage extends JDialog {
 
+    JPanel chatPanel;
+    JScrollPane scrollPane;
     JTextField questionField;
-    JTextArea answerArea;
     DashboardPage dashboard;
 
     public AIAssistantPage(DashboardPage parent) {
 
-        super(parent, "Assistant", false);
-
+        super(parent, "Tiger AI Assistant", false);
         this.dashboard = parent;
 
-        setSize(400, 700);
-
-        setLocation(
-                parent.getX() + parent.getWidth() - 420,
-                parent.getY());
-
+        setSize(430, 720);
+        setLocation(parent.getX() + parent.getWidth() - 450, parent.getY() + 20);
         setLayout(null);
-        getContentPane().setBackground(new Color(245, 247, 250));
+        getContentPane().setBackground(new Color(248, 250, 252));
 
         JLabel title = new JLabel("Assistant");
         title.setFont(new Font("Segoe UI", Font.BOLD, 24));
-        title.setBounds(80, 20, 250, 40);
+        title.setForeground(new Color(0, 70, 130));
+        title.setBounds(25, 20, 300, 35);
         add(title);
 
-        JLabel subtitle = new JLabel("Ask anything about Tiger Detection");
-        subtitle.setBounds(60, 60, 300, 30);
-        add(subtitle);
+        chatPanel = new JPanel();
+        chatPanel.setLayout(new BoxLayout(chatPanel, BoxLayout.Y_AXIS));
+        chatPanel.setBackground(Color.WHITE);
+        chatPanel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+
+        scrollPane = new JScrollPane(chatPanel);
+        scrollPane.setBounds(20, 70, 385, 535);
+        scrollPane.setBorder(BorderFactory.createLineBorder(new Color(210, 220, 230)));
+        scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        add(scrollPane);
 
         questionField = new JTextField();
-        questionField.setBounds(20, 120, 280, 45);
+        questionField.setBounds(20, 625, 315, 45);
+        questionField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        questionField.setBorder(BorderFactory.createLineBorder(new Color(190, 200, 210), 1));
         add(questionField);
 
         JButton sendButton = new JButton(">");
-        sendButton.setBounds(315, 120, 50, 45);
+        sendButton.setBounds(345, 625, 60, 45);
         sendButton.setBackground(new Color(0, 120, 215));
         sendButton.setForeground(Color.WHITE);
-        sendButton.setFont(new Font("Segoe UI", Font.BOLD, 20));
+        sendButton.setFont(new Font("Arial", Font.BOLD, 22));
         sendButton.setFocusPainted(false);
+        sendButton.setOpaque(true);
+        sendButton.setContentAreaFilled(true);
+        sendButton.setBorderPainted(false);
         add(sendButton);
 
-        answerArea = new JTextArea();
-        answerArea.setEditable(false);
-        answerArea.setLineWrap(true);
-        answerArea.setWrapStyleWord(true);
-        answerArea.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-
-        JScrollPane scrollPane = new JScrollPane(answerArea);
-        scrollPane.setBounds(20, 190, 350, 450);
-        add(scrollPane);
-
         sendButton.addActionListener(e -> askAI());
+        questionField.addActionListener(e -> askAI());
+
+        addBotMessage("Hello! Ask me anything about Tiger Detection.");
 
         setVisible(true);
     }
 
     void askAI() {
-
         String question = questionField.getText().trim();
 
         if (question.equals("")) {
-            JOptionPane.showMessageDialog(this, "Enter a question");
             return;
         }
 
-        answerArea.setText("Thinking...");
+        addUserMessage(question);
+        questionField.setText("");
+
+        addBotMessage("Thinking...");
 
         String response = dashboard.callPostApi(
                 "http://127.0.0.1:5000/ai_chat",
                 "question=" + dashboard.encode(question));
 
-        answerArea.setText(response);
+        removeLastMessage();
+        addBotMessage(response);
+    }
+
+    void addUserMessage(String text) {
+        JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        wrapper.setBackground(Color.WHITE);
+        wrapper.add(createBubble(text, new Color(218, 238, 255)));
+        chatPanel.add(wrapper);
+        chatPanel.add(Box.createVerticalStrut(8));
+        refreshChat();
+    }
+
+    void addBotMessage(String text) {
+        JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        wrapper.setBackground(Color.WHITE);
+        wrapper.add(createBubble(text, new Color(242, 242, 242)));
+        chatPanel.add(wrapper);
+        chatPanel.add(Box.createVerticalStrut(8));
+        refreshChat();
+    }
+
+    JTextArea createBubble(String text, Color bg) {
+        JTextArea bubble = new JTextArea(text);
+        bubble.setEditable(false);
+        bubble.setLineWrap(true);
+        bubble.setWrapStyleWord(true);
+        bubble.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        bubble.setForeground(Color.BLACK);
+        bubble.setBackground(bg);
+        bubble.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+        bubble.setColumns(24);
+        return bubble;
+    }
+
+    void removeLastMessage() {
+        int count = chatPanel.getComponentCount();
+
+        if (count >= 2) {
+            chatPanel.remove(count - 1);
+            chatPanel.remove(count - 2);
+        }
+
+        refreshChat();
+    }
+
+    void refreshChat() {
+        chatPanel.revalidate();
+        chatPanel.repaint();
+
+        SwingUtilities.invokeLater(() -> {
+            JScrollBar bar = scrollPane.getVerticalScrollBar();
+            bar.setValue(bar.getMaximum());
+        });
     }
 }

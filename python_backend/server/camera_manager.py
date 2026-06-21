@@ -205,10 +205,14 @@ def camera_worker(camera_id, camera_url):
                     print(camera_id, "Tiger Detected - Sighting Saved")
 
             elif result == "No Tiger Detected":
-                camera_status[camera_id]["last_result"] = "No Tiger Detected"
-                camera_status[camera_id]["ai_summary"] = "No tiger detected in the current frame."
-                camera_status[camera_id]["ai_suggestion"] = "Continue monitoring."
-                camera_status[camera_id]["ai_decision"] = "No immediate action required."
+                
+
+    # Do not overwrite Tiger Detected once it happened
+                if camera_status[camera_id].get("last_result") != "Tiger Detected":
+                   camera_status[camera_id]["last_result"] = "No Tiger Detected"
+                   camera_status[camera_id]["ai_summary"] = "No tiger detected in the current frame."
+                   camera_status[camera_id]["ai_suggestion"] = "Continue monitoring."
+                   camera_status[camera_id]["ai_decision"] = "No immediate action required."
 
             else:
                 camera_status[camera_id]["last_result"] = result

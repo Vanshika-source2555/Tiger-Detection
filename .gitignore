@@ -9,4 +9,4 @@ python_backend/pdf_reports/
 *.png
 *.mp4
 *.pdf
-*.class
+*.classpython_backend/.env

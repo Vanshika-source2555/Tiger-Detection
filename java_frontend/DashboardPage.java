@@ -81,7 +81,7 @@ public class DashboardPage extends JFrame {
         resultArea.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         JScrollPane scroll = new JScrollPane(resultArea);
-        scroll.setBounds(270, 510, 650, 180);
+        scroll.setBounds(270, 510, 650, 150);
         add(scroll);
 
         cam1StatusCard = createCard("CAM_1<br>Stopped<br>Result: None<br>Frames: 0");
@@ -800,6 +800,21 @@ public class DashboardPage extends JFrame {
         button.setBorder(BorderFactory.createLineBorder(new Color(0, 105, 180), 2));
     }
 
+    String getCameraAIDynamicSummary(
+            String camId,
+            String status,
+            String result,
+            String frames,
+            String sameTiger) {
+        return callPostApi(
+                "http://127.0.0.1:5000/camera_ai_summary",
+                "camera_id=" + encode(camId) +
+                        "&status=" + encode(status) +
+                        "&result=" + encode(result) +
+                        "&frames=" + encode(frames) +
+                        "&same_tiger=" + encode(sameTiger));
+    }
+
     String getAIDecision(String result, String message) {
         return callPostApi(
                 "http://127.0.0.1:5000/ai_decision",
@@ -810,6 +825,10 @@ public class DashboardPage extends JFrame {
 
         String[] cams = { "CAM_1", "CAM_2", "CAM_3", "CAM_4" };
 
+        StringBuilder text = new StringBuilder();
+
+        text.append("=========== LIVE CAMERA RESULTS ===========\n\n");
+
         for (String camId : cams) {
 
             String block = getCameraBlock(response, camId);
@@ -817,31 +836,36 @@ public class DashboardPage extends JFrame {
             String status = extractTextValue(block, "status");
             String result = extractTextValue(block, "last_result");
             String frames = extractValue(block, "frames_checked");
-            String summary = extractTextValue(block, "ai_summary");
-            String suggestion = extractTextValue(block, "ai_suggestion");
-            String decision = extractTextValue(block, "ai_decision");
+            String sameTiger = extractTextValue(block, "same_tiger_result");
 
-            if (result.equals("") || result.equalsIgnoreCase("None")) {
+            if (status.equals("") && result.equals("")) {
                 continue;
             }
 
-            resultArea.setText(
-                    "========== LIVE CAMERA RESULT ==========\n\n" +
-                            "Camera      : " + camId + "\n" +
-                            "Status      : " + status + "\n" +
-                            "Last Result : " + result + "\n" +
-                            "Frames      : " + frames + "\n\n" +
+            if (result.equals("")) {
+                result = "No result yet";
+            }
 
-                            "========== AI SUMMARY ==========\n\n" +
-                            (summary.equals("") ? "Monitoring status updated." : summary) + "\n\n" +
+            String aiText = getCameraAIDynamicSummary(
+                    camId,
+                    status,
+                    result,
+                    frames,
+                    sameTiger);
 
-                            "========== AI SUGGESTION ==========\n\n" +
-                            (suggestion.equals("") ? "Continue monitoring." : suggestion) + "\n\n" +
+            text.append(camId).append("\n");
+            text.append("------------------------------------\n");
+            text.append("Status      : ").append(status).append("\n");
+            text.append("Last Result : ").append(result).append("\n");
+            text.append("Frames      : ").append(frames).append("\n\n");
 
-                            "========== AI DECISION SUPPORT ==========\n\n" +
-                            (decision.equals("") ? "Final action should be taken by user." : decision));
+            text.append("Same Tiger Identification\n");
+            text.append(sameTiger.equals("") ? "Not available for this frame." : sameTiger);
+            text.append("\n\n");
 
-            break;
+            text.append(aiText).append("\n\n");
         }
+
+        resultArea.setText(text.toString());
     }
 }

@@ -8,7 +8,8 @@ from reportlab.pdfgen import canvas
 from stripe_match import save_new_stripe
 from stripe_match import identify_tiger
 from predict import predict_image
-from ai_assistant import ai_chat_answer
+
+from ai_assistant import ai_chat_answer, ai_decision_support, generate_camera_ai_summary
 from database import (
     signup_user,
     login_user,
@@ -349,7 +350,7 @@ def api():
         tiger_frames = 0
         nontiger_frames = 0
         best_frame_path = ""
-
+        tiger_detected_once = False
         while True:
             success, frame = cap.read()
 
@@ -358,7 +359,8 @@ def api():
 
             frame_count += 1
 
-            if frame_count % 30 == 0:
+            
+            if frame_count <= 10 or frame_count % 5 == 0:
                 checked_frames += 1
 
                 frame_name = "frame_" + str(checked_frames) + ".jpg"
@@ -370,15 +372,29 @@ def api():
 
                 if output["result"] == "Tiger Detected":
                     tiger_frames += 1
-
+                    tiger_detected_once = True
                     if best_frame_path == "":
                         best_frame_path = save_tiger_image(frame_path)
                 else:
                     nontiger_frames += 1
 
         cap.release()
+        if tiger_detected_once:
+            final_result = "Tiger Detected"
+        else:
+             final_result = "No Tiger Detected"
+        if output["result"] == "Tiger Detected":
 
-        final_result = "Tiger Detected" if tiger_frames > 0 else "No Tiger Detected"
+         tiger_frames += 1
+
+         tiger_detected_once = True
+
+         if best_frame_path == "":
+          best_frame_path = save_tiger_image(frame_path)
+
+        else:
+              nontiger_frames += 1
+        
 
         text_report_path = create_video_report(
             final_result,
@@ -545,14 +561,37 @@ def create_pdf_report(
     c.save()
 
     return pdf_path
+
 @app.route("/ai_chat", methods=["POST"])
 def ai_chat():
-
     question = request.form.get("question", "")
+    return ai_chat_answer(question)
 
-    answer = ai_chat_answer(question)
 
-    return answer
+@app.route("/ai_decision", methods=["POST"])
+def ai_decision():
+    result = request.form.get("result", "")
+    camera_id = request.form.get("camera_id", "System")
+    message = request.form.get("message", "")
+
+    return ai_decision_support(result, camera_id, message)
+
+
+@app.route("/camera_ai_summary", methods=["POST"])
+def camera_ai_summary():
+    camera_id = request.form.get("camera_id", "")
+    status = request.form.get("status", "")
+    result = request.form.get("result", "")
+    frames = request.form.get("frames", "")
+    same_tiger = request.form.get("same_tiger", "")
+
+    return generate_camera_ai_summary(
+        camera_id=camera_id,
+        status=status,
+        result=result,
+        frames=frames,
+        same_tiger=same_tiger
+    )
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5000, debug=False, threaded=True, use_reloader=False)
