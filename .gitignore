@@ -10,3 +10,8 @@ python_backend/pdf_reports/
 *.mp4
 *.pdf
 *.classpython_backend/.env
+.env
+python_backend/.env
+*.class
+__pycache__/
+*.pyc

@@ -4,12 +4,29 @@ import cv2
 import numpy as np
 from datetime import datetime
 import matplotlib.pyplot as plt
+import warnings
+warnings.filterwarnings("ignore")
 from reportlab.pdfgen import canvas
-from stripe_match import save_new_stripe
+
 from stripe_match import identify_tiger
 from predict import predict_image
 
-from ai_assistant import ai_chat_answer, ai_decision_support, generate_camera_ai_summary
+from ai_assistant import (
+    ai_chat_answer,
+    ai_decision_support,
+    generate_camera_ai_summary
+)
+
+try:
+    from ai_assistant import generate_final_report_ai_summary
+except Exception:
+    def generate_final_report_ai_summary(result, frames, tiger_frames, nontiger_frames):
+        return ai_decision_support(
+            result,
+            "Final Report",
+            f"Frames checked: {frames}, Tiger frames: {tiger_frames}, NonTiger frames: {nontiger_frames}"
+        )
+
 from database import (
     signup_user,
     login_user,
@@ -34,7 +51,8 @@ from server.camera_manager import (
     start_camera,
     stop_camera,
     get_camera_status,
-    get_latest_frame
+    get_latest_frame,
+    final_tiger_detection
 )
 
 from server.health_service import get_server_health
@@ -43,6 +61,27 @@ from server.alert_service import read_alerts
 
 
 app = Flask(__name__)
+
+
+def ensure_folders():
+    for folder in [
+        UPLOAD_FOLDER,
+        SAVED_TIGER_FOLDER,
+        CAPTURED_FRAMES_FOLDER,
+        REPORT_FOLDER,
+        GRAPH_FOLDER,
+        PDF_FOLDER,
+        TEMP_FRAMES_FOLDER
+    ]:
+        os.makedirs(folder, exist_ok=True)
+
+
+ensure_folders()
+
+
+@app.route("/")
+def home():
+    return "Tiger Detection Server Running"
 
 
 def process_detection(file_path):
@@ -61,20 +100,16 @@ def process_detection(file_path):
 
     return {
         "result": "No Tiger Detected",
+        "message": "No tiger found",
         "time": current_time
     }
 
 
-@app.route("/")
-def home():
-    return "Advanced Tiger Detection Server Running"
-
-
 def convert_camera_url(camera_url):
-    if camera_url is None or camera_url.strip() == "":
+    if camera_url is None or str(camera_url).strip() == "":
         return 0
 
-    camera_url = camera_url.strip()
+    camera_url = str(camera_url).strip()
 
     if camera_url.isdigit():
         return int(camera_url)
@@ -83,6 +118,8 @@ def convert_camera_url(camera_url):
 
 
 def save_tiger_image(image_path):
+    os.makedirs(SAVED_TIGER_FOLDER, exist_ok=True)
+
     time_name = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     save_path = os.path.join(SAVED_TIGER_FOLDER, f"tiger_{time_name}.jpg")
 
@@ -145,16 +182,8 @@ def snapshot(camera_id):
 
     if frame is None:
         frame = 255 * np.ones((480, 640, 3), dtype=np.uint8)
-
-        cv2.putText(
-            frame,
-            f"Start {camera_id}",
-            (180, 240),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1,
-            (0, 0, 255),
-            2
-        )
+        cv2.putText(frame, f"Start {camera_id}", (180, 240),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
     ret, buffer = cv2.imencode(".jpg", frame)
 
@@ -165,7 +194,6 @@ def snapshot(camera_id):
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
-
     return response
 
 
@@ -173,14 +201,9 @@ def snapshot(camera_id):
 def start_camera_route():
     camera_id = request.form.get("camera_id", "CAM_1")
     camera_url = convert_camera_url(request.form.get("camera_url", "0"))
-
     message = start_camera(camera_id, camera_url)
 
-    return jsonify({
-        "success": True,
-        "message": message,
-        "camera_id": camera_id
-    })
+    return jsonify({"success": True, "message": message, "camera_id": camera_id})
 
 
 @app.route("/stop_camera", methods=["POST"])
@@ -188,42 +211,25 @@ def stop_camera_route():
     camera_id = request.form.get("camera_id", "CAM_1")
     message = stop_camera(camera_id)
 
-    return jsonify({
-        "success": True,
-        "message": message,
-        "camera_id": camera_id
-    })
+    return jsonify({"success": True, "message": message, "camera_id": camera_id})
 
 
 @app.route("/start_multi_camera", methods=["POST"])
 def start_multi_camera_route():
     cameras = {
-        # Laptop webcam
         "CAM_1": request.form.get("cam1", "0"),
-
-        # Mobile IP Webcam link
-        "CAM_2": request.form.get("cam2", "http://192.168.1.10:8080/video"),
-
-        # CCTV / RTSP camera link
-        "CAM_3": request.form.get("cam3", "rtsp://username:password@192.168.1.100:554/stream1"),
-
-        # Video file for testing
-        "CAM_4": request.form.get("cam4", "videos/cam4.mp4")
+        "CAM_2": request.form.get("cam2", ""),
+        "CAM_3": request.form.get("cam3", ""),
+        "CAM_4": request.form.get("cam4", "")
     }
 
     messages = {}
 
     for camera_id, camera_url in cameras.items():
-        if camera_url is not None and camera_url.strip() != "":
-            messages[camera_id] = start_camera(
-                camera_id,
-                convert_camera_url(camera_url)
-            )
+        if camera_url is not None and str(camera_url).strip() != "":
+            messages[camera_id] = start_camera(camera_id, convert_camera_url(camera_url))
 
-    return jsonify({
-        "success": True,
-        "messages": messages
-    })
+    return jsonify({"success": True, "messages": messages})
 
 
 @app.route("/stop_multi_camera", methods=["POST"])
@@ -233,10 +239,7 @@ def stop_multi_camera_route():
     for camera_id in ["CAM_1", "CAM_2", "CAM_3", "CAM_4"]:
         messages[camera_id] = stop_camera(camera_id)
 
-    return jsonify({
-        "success": True,
-        "messages": messages
-    })
+    return jsonify({"success": True, "messages": messages})
 
 
 @app.route("/camera_status", methods=["GET"])
@@ -272,7 +275,6 @@ def alerts_route():
 def clear_alerts_route():
     with open("alerts_log.txt", "w") as file:
         file.write("")
-
     return "Alerts cleared successfully"
 
 
@@ -281,40 +283,43 @@ def api():
     action = request.form.get("action")
 
     if action == "signup":
-        email = request.form.get("email")
-        password = request.form.get("password")
-        return signup_user(email, password)
+        return signup_user(request.form.get("email"), request.form.get("password"))
 
     elif action == "login":
-        email = request.form.get("email")
-        password = request.form.get("password")
-        return login_user(email, password)
+        return login_user(request.form.get("email"), request.form.get("password"))
 
     elif action == "change_password":
         email = request.form.get("email")
-        password_data = request.form.get("password")
+        password_data = request.form.get("password", "")
 
-        old_password, new_password = password_data.split(",")
+        if "," not in password_data:
+            return jsonify({"success": False, "message": "Old and new password required"})
 
+        old_password, new_password = password_data.split(",", 1)
         return change_password(email, old_password, new_password)
 
     elif action == "detect_photo":
         if "file" not in request.files:
-            return jsonify({
-                "result": "No image file received"
-            })
+            return jsonify({"result": "No image file received"})
 
         file = request.files["file"]
-
         file_path = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(file_path)
 
         output = process_detection(file_path)
-
         saved_path = ""
 
         if output["result"] == "Tiger Detected":
             saved_path = save_tiger_image(file_path)
+
+        ai_text = ai_decision_support(
+            output["result"],
+            "Photo Upload",
+            output.get("message", "")
+        )
+
+        output["ai_decision"] = ai_text
+        output["saved_image"] = saved_path
 
         save_detection(
             username="admin",
@@ -329,28 +334,26 @@ def api():
 
     elif action == "detect_video":
         if "file" not in request.files:
-            return jsonify({
-                "result": "No video file received"
-            })
+            return jsonify({"result": "No video file received"})
 
         file = request.files["file"]
-
         video_path = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(video_path)
 
         cap = cv2.VideoCapture(video_path)
 
         if not cap.isOpened():
-            return jsonify({
-                "result": "Video could not be opened"
-            })
+            return jsonify({"result": "Video could not be opened"})
 
         frame_count = 0
         checked_frames = 0
         tiger_frames = 0
         nontiger_frames = 0
         best_frame_path = ""
+
         tiger_detected_once = False
+        last_result = "None"
+
         while True:
             success, frame = cap.read()
 
@@ -359,58 +362,58 @@ def api():
 
             frame_count += 1
 
-            
             if frame_count <= 10 or frame_count % 5 == 0:
                 checked_frames += 1
 
-                frame_name = "frame_" + str(checked_frames) + ".jpg"
-                frame_path = os.path.join(CAPTURED_FRAMES_FOLDER, frame_name)
+                # Same logic as camera: full frame + multi-crop detection
+                result = final_tiger_detection(frame, "VIDEO")
+                print("VIDEO FRAME RESULT:", result)
 
-                cv2.imwrite(frame_path, frame)
-
-                output = process_detection(frame_path)
-
-                if output["result"] == "Tiger Detected":
+                if result == "Tiger":
                     tiger_frames += 1
                     tiger_detected_once = True
+                    last_result = "Tiger Detected"
+
                     if best_frame_path == "":
-                        best_frame_path = save_tiger_image(frame_path)
+                        temp_path = os.path.join(CAPTURED_FRAMES_FOLDER, "video_best_frame.jpg")
+                        cv2.imwrite(temp_path, frame)
+                        best_frame_path = save_tiger_image(temp_path)
+
                 else:
                     nontiger_frames += 1
 
+                    if tiger_detected_once:
+                        last_result = "Tiger Detected"
+                    else:
+                        last_result = "No Tiger Detected"
+
         cap.release()
-        if tiger_detected_once:
-            final_result = "Tiger Detected"
-        else:
-             final_result = "No Tiger Detected"
-        if output["result"] == "Tiger Detected":
 
-         tiger_frames += 1
+        final_result = last_result
 
-         tiger_detected_once = True
+        if final_result == "None":
+            final_result = "No Tiger Detected"
 
-         if best_frame_path == "":
-          best_frame_path = save_tiger_image(frame_path)
+        text_report_path = create_video_report(final_result, checked_frames, tiger_frames, nontiger_frames)
+        graph_path = create_video_graph(tiger_frames, nontiger_frames)
+        pdf_path = create_pdf_report(final_result, checked_frames, tiger_frames, nontiger_frames, graph_path)
 
-        else:
-              nontiger_frames += 1
-        
+        ai_text = ai_decision_support(
+            final_result,
+            "Video Upload",
+            "Frames checked: "
+            + str(checked_frames)
+            + ", Tiger frames: "
+            + str(tiger_frames)
+            + ", NonTiger frames: "
+            + str(nontiger_frames)
+        )
 
-        text_report_path = create_video_report(
+        final_report_ai = generate_final_report_ai_summary(
             final_result,
             checked_frames,
             tiger_frames,
             nontiger_frames
-        )
-
-        graph_path = create_video_graph(tiger_frames, nontiger_frames)
-
-        pdf_path = create_pdf_report(
-            final_result,
-            checked_frames,
-            tiger_frames,
-            nontiger_frames,
-            graph_path
         )
 
         save_detection(
@@ -423,16 +426,22 @@ def api():
         )
 
         return jsonify({
+            "status": "Completed",
             "result": final_result,
+            "last_result": final_result,
             "frames_checked": checked_frames,
+            "tiger_frames": tiger_frames,
+            "nontiger_frames": nontiger_frames,
+            "saved_image": best_frame_path,
+            "text_report": text_report_path,
+            "pdf_report": pdf_path,
+            "ai_decision": ai_text,
+            "final_report_ai": final_report_ai,
             "time": datetime.now().strftime("%d-%m-%Y %I:%M %p")
         })
 
     elif action == "live_camera":
-        return jsonify({
-            "success": True,
-            "message": "Use /start_camera and /snapshot/CAM_1 for live camera preview"
-        })
+        return jsonify({"success": True, "message": "Use /start_camera and /snapshot/CAM_1 for live camera preview"})
 
     elif action == "history":
         return get_history()
@@ -441,27 +450,18 @@ def api():
         return get_stats()
 
     elif action == "user_stats":
-        username = request.form.get("username")
-        return get_user_stats(username)
+        return get_user_stats(request.form.get("username"))
 
     elif action == "start_cctv_server":
         camera_id = request.form.get("camera_id", "CAM_1")
         camera_url = convert_camera_url(request.form.get("camera_url", "0"))
         message = start_camera(camera_id, camera_url)
-
-        return jsonify({
-            "success": True,
-            "message": message
-        })
+        return jsonify({"success": True, "message": message})
 
     elif action == "stop_cctv_server":
         camera_id = request.form.get("camera_id", "CAM_1")
         message = stop_camera(camera_id)
-
-        return jsonify({
-            "success": True,
-            "message": message
-        })
+        return jsonify({"success": True, "message": message})
 
     elif action == "camera_status":
         return jsonify(get_camera_status())
@@ -485,18 +485,10 @@ def api():
         return read_alerts()
 
     else:
-        return jsonify({
-            "success": False,
-            "message": "Invalid action"
-        })
+        return jsonify({"success": False, "message": "Invalid action"})
 
 
-def create_video_report(
-    final_result,
-    checked_frames,
-    tiger_frames,
-    nontiger_frames
-):
+def create_video_report(final_result, checked_frames, tiger_frames, nontiger_frames):
     time_name = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_path = os.path.join(REPORT_FOLDER, "report_" + time_name + ".txt")
 
@@ -532,13 +524,7 @@ def create_video_graph(tiger_frames, nontiger_frames):
     return graph_path
 
 
-def create_pdf_report(
-    final_result,
-    checked_frames,
-    tiger_frames,
-    nontiger_frames,
-    graph_path
-):
+def create_pdf_report(final_result, checked_frames, tiger_frames, nontiger_frames, graph_path):
     time_name = datetime.now().strftime("%Y%m%d_%H%M%S")
     pdf_path = os.path.join(PDF_FOLDER, "report_" + time_name + ".pdf")
 
@@ -559,13 +545,12 @@ def create_pdf_report(
         c.drawImage(graph_path, 100, 300, width=350, height=220)
 
     c.save()
-
     return pdf_path
+
 
 @app.route("/ai_chat", methods=["POST"])
 def ai_chat():
-    question = request.form.get("question", "")
-    return ai_chat_answer(question)
+    return ai_chat_answer(request.form.get("question", ""))
 
 
 @app.route("/ai_decision", methods=["POST"])
@@ -573,7 +558,6 @@ def ai_decision():
     result = request.form.get("result", "")
     camera_id = request.form.get("camera_id", "System")
     message = request.form.get("message", "")
-
     return ai_decision_support(result, camera_id, message)
 
 
@@ -593,5 +577,27 @@ def camera_ai_summary():
         same_tiger=same_tiger
     )
 
+
+@app.route("/final_report_ai", methods=["POST"])
+def final_report_ai():
+    result = request.form.get("result", "")
+    frames = request.form.get("frames", "0")
+    tiger_frames = request.form.get("tiger_frames", "0")
+    nontiger_frames = request.form.get("nontiger_frames", "0")
+
+    return generate_final_report_ai_summary(
+        result,
+        frames,
+        tiger_frames,
+        nontiger_frames
+    )
+
+
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False, threaded=True, use_reloader=False)
+    app.run(
+        host="127.0.0.1",
+        port=5000,
+        debug=False,
+        threaded=True,
+        use_reloader=False
+    )

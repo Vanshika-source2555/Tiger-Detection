@@ -306,7 +306,7 @@ public class DashboardPage extends JFrame {
     }
 
     void startAutoRefresh() {
-        dashboardTimer = new Timer(1000, e -> {
+        dashboardTimer = new Timer(10000, e -> {
             updateCameraStatus();
             updateServerHealth();
         });
@@ -320,7 +320,7 @@ public class DashboardPage extends JFrame {
         updateOneCameraCard(cam2StatusCard, response, "CAM_2");
         updateOneCameraCard(cam3StatusCard, response, "CAM_3");
         updateOneCameraCard(cam4StatusCard, response, "CAM_4");
-        updateResultAreaFromCameraStatus(response);
+        // updateResultAreaFromCameraStatus(response);
         String tigerCountText = extractValue(response, "tiger_count");
         String lastResult = extractTextValue(response, "last_result");
 
@@ -472,57 +472,56 @@ public class DashboardPage extends JFrame {
         if (option == JFileChooser.APPROVE_OPTION) {
             lastSelectedFile = chooser.getSelectedFile();
 
-            resultArea.setText("Processing...\nPlease wait...");
-
-            String response = ApiClient.sendFile(action, lastSelectedFile);
-            String formatted = formatDetectionResult(response);
-
-            String result = extractTextValue(response, "result");
-            String notification = extractTextValue(response, "notification");
-
-            String aiDecision = getAIDecision(result, notification);
-
-            resultArea.setText(
-                    formatted +
-                            "\n\n========== AI DECISION SUPPORT ==========\n\n" +
-                            aiDecision);
-
-            if (isTigerDetected(response)) {
-                playAlarm();
-
-                JOptionPane.showMessageDialog(
-                        this,
-                        "TIGER DETECTED!\nAlert Generated.",
-                        "Tiger Alert",
-                        JOptionPane.WARNING_MESSAGE);
-
-                showNotification(
-                        "TIGER DETECTED!",
-                        new Color(255, 245, 245),
-                        new Color(180, 0, 0));
-
-            } else {
-                JOptionPane.showMessageDialog(
-                        this,
-                        "NO TIGER DETECTED",
-                        "Detection Result",
-                        JOptionPane.INFORMATION_MESSAGE);
-
-                showNotification(
-                        "NO TIGER DETECTED",
-                        new Color(235, 255, 235),
-                        new Color(0, 120, 0));
-            }
-
             String fileName = lastSelectedFile.getName().toLowerCase();
-
-            if (fileName.endsWith(".mp4")
+            boolean isVideo = fileName.endsWith(".mp4")
                     || fileName.endsWith(".avi")
                     || fileName.endsWith(".mov")
-                    || fileName.endsWith(".mkv")) {
+                    || fileName.endsWith(".mkv");
 
+            if (isVideo) {
                 new FullScreenPreview(lastSelectedFile);
             }
+
+            resultArea.setText("Processing...\nPlease wait. Detection is running...");
+
+            new Thread(() -> {
+                String response = ApiClient.sendFile(action, lastSelectedFile);
+                String formatted = formatDetectionResult(response);
+
+                String result = extractTextValue(response, "result");
+                String notification = extractTextValue(response, "notification");
+                String aiDecision = getAIDecision(result, notification);
+
+                SwingUtilities.invokeLater(() -> {
+                    resultArea.setText(
+                            formatted +
+                                    "\n\n========== AI DECISION SUPPORT ==========\n\n" +
+                                    aiDecision);
+
+                    if (isTigerDetected(response)) {
+                        playAlarm();
+                        JOptionPane.showMessageDialog(
+                                this,
+                                "TIGER DETECTED!\nAlert Generated.",
+                                "Tiger Alert",
+                                JOptionPane.WARNING_MESSAGE);
+                        showNotification(
+                                "TIGER DETECTED!",
+                                new Color(255, 245, 245),
+                                new Color(180, 0, 0));
+                    } else {
+                        JOptionPane.showMessageDialog(
+                                this,
+                                "NO TIGER DETECTED",
+                                "Detection Result",
+                                JOptionPane.INFORMATION_MESSAGE);
+                        showNotification(
+                                "NO TIGER DETECTED",
+                                new Color(235, 255, 235),
+                                new Color(0, 120, 0));
+                    }
+                });
+            }).start();
         }
     }
 
@@ -842,16 +841,13 @@ public class DashboardPage extends JFrame {
                 continue;
             }
 
+            if (status.equals("")) {
+                status = "Stopped";
+            }
+
             if (result.equals("")) {
                 result = "No result yet";
             }
-
-            String aiText = getCameraAIDynamicSummary(
-                    camId,
-                    status,
-                    result,
-                    frames,
-                    sameTiger);
 
             text.append(camId).append("\n");
             text.append("------------------------------------\n");
@@ -860,10 +856,30 @@ public class DashboardPage extends JFrame {
             text.append("Frames      : ").append(frames).append("\n\n");
 
             text.append("Same Tiger Identification\n");
-            text.append(sameTiger.equals("") ? "Not available for this frame." : sameTiger);
+            text.append(sameTiger.equals("") ? "Not available." : sameTiger);
             text.append("\n\n");
 
-            text.append(aiText).append("\n\n");
+            text.append("AI Suggestion\n");
+
+            if (result.equalsIgnoreCase("Tiger Detected")) {
+                text.append("Review the saved image and check nearby cameras.\n\n");
+                text.append("AI Decision\n");
+                text.append("Continue monitoring and verify the alert manually.\n\n");
+            } else if (result.equalsIgnoreCase("No Tiger Detected")) {
+                text.append("Continue monitoring.\n\n");
+                text.append("AI Decision\n");
+                text.append("No immediate action required.\n\n");
+            } else if (status.equalsIgnoreCase("Offline") ||
+                    status.equalsIgnoreCase("Disconnected") ||
+                    result.toLowerCase().contains("camera")) {
+                text.append("Check camera source, network, and backend logs.\n\n");
+                text.append("AI Decision\n");
+                text.append("Restart the camera after checking the issue.\n\n");
+            } else {
+                text.append("Monitoring status updated.\n\n");
+                text.append("AI Decision\n");
+                text.append("User should verify the current status.\n\n");
+            }
         }
 
         resultArea.setText(text.toString());
