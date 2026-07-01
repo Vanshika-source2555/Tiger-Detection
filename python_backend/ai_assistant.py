@@ -1,22 +1,15 @@
 import os
 import re
 import openpyxl
+import warnings
 from dotenv import load_dotenv
-import google.generativeai as genai
+import httpx
+import ollama
 
-# Load .env file
-load_dotenv()
+
 
 QA_FILE = "qa_dataset.xlsx"
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-if GEMINI_API_KEY:
-    print("Gemini API key loaded")
-    genai.configure(api_key=GEMINI_API_KEY)
-else:
-    print("Gemini API key NOT loaded")
-
-gemini_model = genai.GenerativeModel("gemini-2.0-flash-lite")
 
 
 def clean_text(text):
@@ -78,68 +71,515 @@ def dataset_answer(user_question):
     return None
 
 
-def gemini_answer(question):
-    if not GEMINI_API_KEY:
-        return None
-
+def ollama_answer(question, system_prompt=None):
     try:
-        prompt = f"""
+        if system_prompt is None:
+            system_prompt = """
+
 You are Tiger AI Assistant.
 
-Give short, simple, and impactful answers.
+You are an intelligent AI assistant for the Tiger Detection Monitoring System.
 
-Focus only on:
-image detection, video detection, live camera, same tiger identification,
-alerts, history, reports, dataset, model training, backend, Java frontend,
-and troubleshooting.
+Your job is to help users understand, operate, troubleshoot, and improve the complete wildlife monitoring system.
 
-Give practical suggestions.
-Final real-world action must be done by the user.
+=========================
+YOUR KNOWLEDGE AREAS
+=========================
 
-Question:
-{question}
-"""
+You can answer questions about:
 
-        response = gemini_model.generate_content(prompt)
-        return response.text
+----------------------------------------------------
+1. Tiger Detection
+----------------------------------------------------
+- Tiger Detection
+- Tiger Identification
+- Tiger Recognition
+- Tiger Classification
+- Tiger Species
+- Tiger Behaviour
+- Tiger Movement
+- Tiger Tracking
+- Tiger Presence
+- Tiger Activity
+- Tiger Sighting
+- Tiger Monitoring
+
+----------------------------------------------------
+2. Wildlife Monitoring
+----------------------------------------------------
+- Wildlife Monitoring
+- Forest Surveillance
+- Wildlife Conservation
+- Protected Forest
+- National Parks
+- Animal Detection
+- Animal Classification
+- Animal Tracking
+- Animal Behaviour
+- Human-Wildlife Conflict
+- Forest Safety
+
+----------------------------------------------------
+3. Computer Vision
+----------------------------------------------------
+- Object Detection
+- Image Classification
+- Image Segmentation
+- Feature Extraction
+- Bounding Boxes
+- Confidence Score
+- Non-Max Suppression
+- Deep Learning Vision
+- OpenCV
+- Image Processing
+
+----------------------------------------------------
+4. MOdel Training & Evaluation
+----------------------------------------------------
+
+-  Model
+- Model Training
+- Model Validation
+- Dataset Preparation
+- Image Annotation
+- Label Files
+- Detection Accuracy
+- Precision
+- Recall
+- mAP
+- Inference
+- Prediction
+
+----------------------------------------------------
+5. Llama & Ollama
+----------------------------------------------------
+- Llama
+- Llama 3.2
+- Ollama
+- Local LLM
+- Prompt Engineering
+- AI Summary
+- AI Suggestion
+- AI Decision Support
+- AI Reports
+- AI Recommendations
+- AI Reasoning
+
+----------------------------------------------------
+6. Images
+----------------------------------------------------
+- Uploaded Images
+- Image Detection
+- Saved Images
+- Captured Frames
+- Tiger Screenshots
+- Latest Tiger Image
+- Image Quality
+- Image Resolution
+- Image Formats
+
+----------------------------------------------------
+7. Videos
+----------------------------------------------------
+- Uploaded Videos
+- Video Detection
+- Video Processing
+- Frame Extraction
+- Frame Analysis
+- FPS
+- Video Preview
+- Saved Video Results
+
+----------------------------------------------------
+8. Live Camera
+----------------------------------------------------
+- Live Camera
+- Webcam
+- CCTV
+- IP Camera
+- Camera Feed
+- Camera Monitoring
+- Camera Health
+- Camera Status
+- Camera Restart
+- Camera Preview
+- Camera Snapshot
+- Camera Frames
+- Live Detection
+
+----------------------------------------------------
+9. Same Tiger Identification
+----------------------------------------------------
+- Stripe Matching
+- Stripe Comparison
+- Same Tiger Detection
+- Tiger Re-identification
+- Similarity Score
+- Feature Matching
+- Visual Comparison
+
+----------------------------------------------------
+10. Alerts
+----------------------------------------------------
+- Alert System
+- Popup Alerts
+- Email Alerts
+- Notifications
+- Alarm
+- Warning
+- Emergency Alert
+- Detection Alert
+
+----------------------------------------------------
+11. Reports
+----------------------------------------------------
+- PDF Reports
+- Text Reports
+- Detection Reports
+- Summary Reports
+- AI Reports
+- Report Generation
+- Report Download
+
+----------------------------------------------------
+12. Dashboard
+----------------------------------------------------
+- Dashboard
+- Status Cards
+- Result Panel
+- Live Monitoring
+- Camera Panels
+- Dashboard Controls
+- Analytics
+- Statistics
+
+----------------------------------------------------
+13. Analytics
+----------------------------------------------------
+- Detection Count
+- Tiger Count
+- Camera Statistics
+- Detection History
+- Daily Report
+- Weekly Report
+- Monthly Report
+- Graphs
+- Charts
+
+----------------------------------------------------
+14. Dataset
+----------------------------------------------------
+- Dataset
+- Dataset Collection
+- Image Dataset
+- Video Dataset
+- YOLO Dataset
+- Annotation
+- LabelImg
+- Dataset Augmentation
+- Dataset Split
+
+----------------------------------------------------
+15. Machine Learning
+----------------------------------------------------
+- Artificial Intelligence
+- Machine Learning
+- Deep Learning
+- CNN
+- Neural Networks
+- Transfer Learning
+- Training
+- Testing
+- Validation
+- Model Evaluation
+
+----------------------------------------------------
+16. Backend
+----------------------------------------------------
+- Flask
+- Python
+- REST API
+- JSON
+- HTTP Requests
+- API Response
+- API Endpoints
+- Server
+- Backend Processing
+
+----------------------------------------------------
+17. Frontend
+----------------------------------------------------
+- Java Swing
+- Dashboard UI
+- JTextArea
+- JPanel
+- JFrame
+- Buttons
+- Camera Window
+- Preview
+- Java Programming
+
+----------------------------------------------------
+18. Database & Storage
+----------------------------------------------------
+- Saved Images
+- Saved Videos
+- Reports Folder
+- Logs
+- JSON Files
+- Storage
+- Cleanup Storage
+- File Management
+
+----------------------------------------------------
+19. System Features
+----------------------------------------------------
+- Login
+- Registration
+- Authentication
+- Account
+- User Profile
+- Camera Control
+- Analytics
+- Alerts
+- Reports
+- Settings
+
+----------------------------------------------------
+20. Troubleshooting
+----------------------------------------------------
+- Flask Errors
+- Python Errors
+- Java Errors
+- Camera Offline
+- Camera Not Working
+- API Errors
+- JSON Errors
+- YOLO Errors
+- Ollama Errors
+- Llama Errors
+- Model Loading Errors
+- Detection Failure
+- Installation Problems
+
+----------------------------------------------------
+21. Project Documentation
+----------------------------------------------------
+- Project Architecture
+- Project Workflow
+- System Design
+- Data Flow
+- Technology Stack
+- Advantages
+- Limitations
+- Future Scope
+- Project Demonstration
+- Viva Questions
+
+----------------------------------------------------
+22. Generative AI
+----------------------------------------------------
+- Generative AI
+- Agentic AI
+- LLM
+- NLP
+- Prompt Engineering
+- AI Agents
+- AI Assistant
+- Chatbot
+- AI Integration
+
+----------------------------------------------------
+23. Git & Development
+----------------------------------------------------
+- Git
+- GitHub
+- Version Control
+- Branch
+- Commit
+- Push
+- Pull
+- Merge
+- Repository
+
+----------------------------------------------------
+24. Deployment
+----------------------------------------------------
+- Windows
+- Linux
+- Docker
+- Virtual Environment
+- Requirements.txt
+- Pip
+- Python Packages
+
+----------------------------------------------------
+25. Performance
+----------------------------------------------------
+- Detection Speed
+- FPS
+- Optimization
+- GPU
+- CPU
+- RAM Usage
+- Processing Time
+- Performance Improvement
+
+=========================
+HOW TO ANSWER
+=========================
+
+Always:
+
+• Answer in simple English.
+• Keep answers practical.
+• Give step-by-step guidance when needed.
+• Explain technical terms simply.
+• Suggest solutions for errors.
+• Recommend best practices.
+• Mention possible causes before solutions.
+• Use bullet points when useful.
+• Never invent information.
+• If unsure, clearly say you don't know.
+
+You are a professional AI assistant dedicated to the Tiger Detection Monitoring System."""
+
+        # ✅ FIX: Use explicit httpx client so the socket is properly
+        #         closed after each call — stops the ResourceWarning:
+        #         "unclosed <socket.socket ... raddr=('127.0.0.1', 11434)>"
+        with httpx.Client() as http_client:
+            client = ollama.Client(host="http://localhost:11434", httpx_client=http_client)
+            response = client.chat(
+                model="llama3.2",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": system_prompt
+                    },
+                    {
+                        "role": "user",
+                        "content": question
+                    }
+                ]
+            )
+
+        return response["message"]["content"]
 
     except Exception as e:
-        print("Gemini chat error:", e)
+        print("OLLAMA ERROR:", e)
         return None
 
 
 def fallback_answer(question):
+
     q = question.lower()
 
     if "camera" in q:
-        return "Camera monitoring checks live frames.\n\nSuggestion:\nCheck camera source and live preview."
+        return """
+Summary:
+Camera monitoring checks the live camera feed.
 
-    if "tiger" in q:
-        return "Tiger detection checks images, videos, and camera frames.\n\nSuggestion:\nReview saved image and history."
+Explanation:
+The system continuously captures frames and performs tiger detection.
 
-    if "error" in q or "problem" in q:
-        return "Problem detected.\n\nSuggestion:\nCheck Flask backend, model.pkl, camera source, and terminal logs."
+Suggestion:
+Verify the camera connection and preview.
 
-    return (
-        "I can help with image detection, video detection, live camera, "
-        "same tiger identification, alerts, history, reports, dataset, "
-        "model training, backend, Java frontend, and troubleshooting."
-    )
+Decision:
+Continue monitoring.
+"""
+
+    elif "video" in q:
+        return """
+Summary:
+Video detection analyses uploaded videos frame by frame.
+
+Explanation:
+Each frame is checked for tiger presence.
+
+Suggestion:
+Use clear and stable videos.
+
+Decision:
+Review detected frames.
+"""
+
+    elif "image" in q or "photo" in q:
+        return """
+Summary:
+Image detection checks a single uploaded image.
+
+Explanation:
+The AI identifies whether a tiger is present.
+
+Suggestion:
+Use high-quality images.
+
+Decision:
+Verify saved results.
+"""
+
+    elif "tiger" in q:
+        return """
+Summary:
+Tiger detection completed.
+
+Explanation:
+The model searched for tiger features in the media.
+
+Suggestion:
+Review saved screenshots.
+
+Decision:
+Continue monitoring nearby cameras.
+"""
+
+    elif "error" in q:
+        return """
+Summary:
+A system error occurred.
+
+Explanation:
+This may be due to Flask, camera, or model issues.
+
+Suggestion:
+Check backend logs and restart the server.
+
+Decision:
+Fix the error before continuing.
+"""
+
+    return """
+Summary:
+I can help with the Tiger Detection Monitoring System.
+
+Explanation:
+Ask me about cameras, videos, photos, reports, alerts, datasets, AI, YOLO, Llama, Flask, Java, GitHub, analytics, troubleshooting, and project documentation.
+
+Suggestion:
+Ask a specific question.
+
+Decision:
+Ready to assist.
+"""
 
 
 def ai_chat_answer(question):
+
+    # Priority 1: Llama 3.2
+    answer = ollama_answer(question)
+
+    if answer:
+        return answer
+
+    # Priority 2: Dataset
     answer = dataset_answer(question)
 
     if answer:
         return answer
 
-    answer = gemini_answer(question)
-
-    if answer:
-        return answer
-
+    # Priority 3: Rule based fallback
     return fallback_answer(question)
-
 
 def local_camera_ai_summary(camera_id, status, result, frames, same_tiger=""):
     r = (result or "").lower()
@@ -186,57 +626,197 @@ def local_camera_ai_summary(camera_id, status, result, frames, same_tiger=""):
 
 
 def generate_camera_ai_summary(camera_id, status, result, frames, same_tiger=""):
+    
     print("ENTERED generate_camera_ai_summary")
-    print("GEMINI_API_KEY:", "FOUND" if GEMINI_API_KEY else "MISSING")
+    print("OLLAMA:", "FOUND" if ollama else "MISSING")
 
-    if not GEMINI_API_KEY:
-        print("USING LOCAL AI: GEMINI_API_KEY missing")
+    if not ollama:
+        print("USING LOCAL AI: OLLAMA missing")
         return local_camera_ai_summary(camera_id, status, result, frames, same_tiger)
 
     try:
-        print("USING GEMINI AI for", camera_id)
+        print("USING OLLAMA AI for", camera_id)
 
         prompt = f"""
-You are Tiger AI Assistant for a Tiger Detection Monitoring System.
+You are an AI Wildlife Monitoring Assistant.
 
-Camera: {camera_id}
-Status: {status}
-Last Result: {result}
+Analyze the following detection result.
+
+Camera ID: {camera_id}
+Camera Status: {status}
+Detection Result: {result}
 Frames Checked: {frames}
 Same Tiger Status: {same_tiger}
 
-Generate dynamic output exactly in this format:
+Generate ONLY the following format.
 
 AI Summary:
-...
+(2-3 lines describing what happened.)
 
 AI Suggestion:
-...
+(Practical recommendation for the forest officer.)
 
 AI Decision Support:
-...
+(Explain whether immediate action is needed.)
 
-Keep it short, simple, and practical.
-Do not give long explanation.
-Final real-world action must be done by user.
+Risk Level:
+(Low / Medium / High)
+
+Confidence:
+(High / Medium / Low)
+
+Recommended Action:
+(One short action.)
+
+Keep the response below 120 words.
+Do not use markdown.
+Do not add introductions.
 """
 
-        response = gemini_model.generate_content(prompt)
+        response = ollama_answer(prompt)
 
-        print("GEMINI RESPONSE:", response.text)
+        print("OLLAMA RESPONSE:", response)
 
-        return response.text
+        return response
 
     except Exception as e:
-        print("GEMINI ERROR:", e)
+        print("OLLAMA ERROR:", e)
         return local_camera_ai_summary(camera_id, status, result, frames, same_tiger)
 
 
 def ai_decision_support(result, camera_id="System", message=""):
-    return generate_camera_ai_summary(
-        camera_id=camera_id,
-        status="Detection Completed",
-        result=result,
-        frames="N/A",
-        same_tiger=message
-    )
+    """
+    Generate decision support for any detection
+    """
+
+    prompt = f"""
+You are providing decision support for a wildlife monitoring system.
+
+Result: {result}
+Source: {camera_id}
+Context: {message}
+
+Provide ONLY:
+
+ASSESSMENT: What happened?
+URGENCY: Low / Medium / High / Critical
+ACTION: What should be done now?
+NEXT: What happens next?
+
+Keep it very short (max 4 lines).
+"""
+
+    try:
+        response = ollama_answer(prompt)
+        if response:
+            return response
+    except Exception as e:
+        print("Ollama error:", e)
+
+    # fallback ONLY if LLM fails
+    if "tiger" in result.lower():
+        return (
+            "ASSESSMENT: Tiger detected\n"
+            "URGENCY: High\n"
+            "ACTION: Start alert protocol\n"
+            "NEXT: Monitor nearby cameras"
+        )
+    else:
+        return (
+            "ASSESSMENT: No threat\n"
+            "URGENCY: Low\n"
+            "ACTION: Continue monitoring\n"
+            "NEXT: Resume normal schedule"
+        )
+def generate_photo_detection_analysis(result, confidence, filename):
+    prompt = f"""
+You are an AI Wildlife Monitoring Assistant.
+
+Photo Detection Result:
+File: {filename}
+Result: {result}
+Confidence: {confidence}
+
+Generate ONLY:
+
+AI Summary:
+(2-3 lines about what happened)
+
+AI Suggestion:
+(practical action for forest officer)
+
+AI Decision Support:
+(is action needed or not)
+
+Risk Level:
+(Low / Medium / High)
+
+Confidence:
+(Low / Medium / High)
+
+Recommended Action:
+(one clear action)
+"""
+
+    try:
+        return ollama_answer(prompt)
+    except:
+        return f"""
+AI Summary:
+Photo analyzed for tiger detection.
+
+AI Suggestion:
+Check image clarity and re-run detection if needed.
+
+AI Decision Support:
+No critical issue detected.
+
+Risk Level: Medium
+
+Confidence: Low
+
+Recommended Action:
+Review image manually.
+"""
+
+
+def generate_video_detection_analysis(result, frames_checked, tiger_frames, filename):
+    prompt = f"""
+You are an AI Wildlife Monitoring Assistant.
+
+Video Detection Result:
+Video: {filename}
+Result: {result}
+Frames Checked: {frames_checked}
+Tiger Frames: {tiger_frames}
+
+Generate ONLY:
+
+AI Summary:
+AI Suggestion:
+AI Decision Support:
+Risk Level:
+Confidence:
+Recommended Action:
+"""
+
+    try:
+        return ollama_answer(prompt)
+    except:
+        return f"""
+AI Summary:
+Video analyzed successfully.
+
+AI Suggestion:
+Review detected frames.
+
+AI Decision Support:
+Continue monitoring.
+
+Risk Level: Medium
+
+Confidence: Low
+
+Recommended Action:
+Check saved frames.
+"""

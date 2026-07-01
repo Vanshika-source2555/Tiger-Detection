@@ -1,0 +1,29 @@
+{
+  "detections": [
+    {
+      "timestamp": "2026-06-28T18:10:04.612711",
+      "result": "Tiger Detected",
+      "camera": "",
+      "confidence": 44.78
+    },
+    {
+      "timestamp": "2026-06-28T21:54:23.929130",
+      "result": "Tiger Detected",
+      "camera": "",
+      "confidence": 97.83
+    },
+    {
+      "timestamp": "2026-06-28T22:04:26.439973",
+      "result": "Tiger Detected",
+      "camera": "",
+      "confidence": 97.83
+    },
+    {
+      "timestamp": "2026-06-28T22:13:07.498448",
+      "result": "Tiger Detected",
+      "camera": "",
+      "confidence": 44.78
+    }
+  ],
+  "patterns": {}
+}

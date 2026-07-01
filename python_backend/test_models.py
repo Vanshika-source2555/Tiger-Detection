@@ -1,4 +1,4 @@
-import google.generativeai as genai
+import ollama
 from dotenv import load_dotenv
 import os
 

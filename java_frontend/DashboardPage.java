@@ -21,6 +21,11 @@ public class DashboardPage extends JFrame {
     long lastPopupTime = 0;
     String lastAlertKey = "";
 
+    // ✅ FIX: This flag stops the auto-refresh timer from overwriting
+    // your video/photo detection result in the result area.
+    // Set to true while detection is running, false when done.
+    boolean detectionRunning = false;
+
     public DashboardPage(String email) {
         this.email = email;
 
@@ -118,35 +123,15 @@ public class DashboardPage extends JFrame {
 
         // ===== AI Button =====
         JButton aiButton = new JButton("AI");
-
         aiButton.setBounds(1080, 650, 65, 65);
-
-        aiButton.setBackground(
-                new Color(0, 120, 215));
-
+        aiButton.setBackground(new Color(0, 120, 215));
         aiButton.setForeground(Color.WHITE);
-
-        aiButton.setFont(
-                new Font(
-                        "Segoe UI",
-                        Font.BOLD,
-                        18));
-
+        aiButton.setFont(new Font("Segoe UI", Font.BOLD, 18));
         aiButton.setFocusPainted(false);
-
-        aiButton.setBorder(
-                BorderFactory.createLineBorder(
-                        Color.WHITE,
-                        2));
-
+        aiButton.setBorder(BorderFactory.createLineBorder(Color.WHITE, 2));
         add(aiButton);
 
-        // Open AI Sidebar
-        aiButton.addActionListener(e -> {
-
-            new AIAssistantPage(this);
-
-        });
+        aiButton.addActionListener(e -> new AIAssistantPage(this));
 
         setVisible(true);
     }
@@ -227,47 +212,51 @@ public class DashboardPage extends JFrame {
             File selectedFrame = chooser.getSelectedFile();
             lastSelectedFile = selectedFrame;
 
+            // ✅ FIX: Block auto-refresh from overwriting result
+            detectionRunning = true;
             resultArea.setText("Processing selected captured frame...\nPlease wait...");
 
-            String response = ApiClient.sendFile("detect_photo", selectedFrame);
-            String formatted = formatDetectionResult(response);
+            new Thread(() -> {
+                String response = ApiClient.sendFile("detect_photo", selectedFrame);
 
-            String result = extractTextValue(response, "result");
-            String notification = extractTextValue(response, "notification");
+                String formatted = formatDetectionResult(response);
+                String result = extractTextValue(response, "result");
+                String message = extractTextValue(response, "message");
+                String aiDecision = getAIDecision(result, message);
 
-            String aiDecision = getAIDecision(result, notification);
+                SwingUtilities.invokeLater(() -> {
+                    resultArea.setText(
+                            formatted +
+                                    "\n\n========== AI DECISION SUPPORT ==========\n\n" +
+                                    aiDecision);
 
-            resultArea.setText(
-                    formatted +
-                            "\n\n========== AI DECISION SUPPORT ==========\n\n" +
-                            aiDecision);
+                    // ✅ FIX: Allow auto-refresh again after result is shown
+                    detectionRunning = false;
 
-            if (isTigerDetected(response)) {
-                playAlarm();
-
-                JOptionPane.showMessageDialog(
-                        this,
-                        "TIGER DETECTED in captured frame!\nAlert Generated.",
-                        "Tiger Alert",
-                        JOptionPane.WARNING_MESSAGE);
-
-                showNotification(
-                        "TIGER DETECTED!",
-                        new Color(255, 245, 245),
-                        new Color(180, 0, 0));
-
-            } else {
-                JOptionPane.showMessageDialog(
-                        this,
-                        "NO TIGER DETECTED in selected frame",
-                        "Detection Result",
-                        JOptionPane.INFORMATION_MESSAGE);
-
-                showNotification(
-                        "NO TIGER DETECTED",
-                        new Color(235, 255, 235),
-                        new Color(0, 120, 0));
-            }
+                    if (isTigerDetected(response)) {
+                        playAlarm();
+                        JOptionPane.showMessageDialog(
+                                this,
+                                "TIGER DETECTED in captured frame!\nAlert Generated.",
+                                "Tiger Alert",
+                                JOptionPane.WARNING_MESSAGE);
+                        showNotification(
+                                "TIGER DETECTED!",
+                                new Color(255, 245, 245),
+                                new Color(180, 0, 0));
+                    } else {
+                        JOptionPane.showMessageDialog(
+                                this,
+                                "NO TIGER DETECTED in selected frame",
+                                "Detection Result",
+                                JOptionPane.INFORMATION_MESSAGE);
+                        showNotification(
+                                "NO TIGER DETECTED",
+                                new Color(235, 255, 235),
+                                new Color(0, 120, 0));
+                    }
+                });
+            }).start();
         }
     }
 
@@ -320,7 +309,14 @@ public class DashboardPage extends JFrame {
         updateOneCameraCard(cam2StatusCard, response, "CAM_2");
         updateOneCameraCard(cam3StatusCard, response, "CAM_3");
         updateOneCameraCard(cam4StatusCard, response, "CAM_4");
-        // updateResultAreaFromCameraStatus(response);
+
+        // ✅ FIX: Only update the result area with camera status when
+        // NO detection is currently running.
+        // This prevents the auto-refresh from wiping your video/photo result.
+        if (!detectionRunning) {
+            updateResultAreaFromCameraStatus(response);
+        }
+
         String tigerCountText = extractValue(response, "tiger_count");
         String lastResult = extractTextValue(response, "last_result");
 
@@ -359,13 +355,6 @@ public class DashboardPage extends JFrame {
         String status = extractTextValue(block, "status");
         String result = extractTextValue(block, "last_result");
         String frames = extractValue(block, "frames_checked");
-        card.setText(
-                "<html><center>" +
-                        camId + "<br>" +
-                        status + "<br>" +
-                        "Result: " + result + "<br>" +
-                        "Frames: " + frames +
-                        "</center></html>");
 
         if (status.equals(""))
             status = "Stopped";
@@ -378,8 +367,7 @@ public class DashboardPage extends JFrame {
                         camId + "<br>" +
                         status + "<br>" +
                         "Result: " + result + "<br>" +
-                        "Frames: " + frames + "<br>" +
-
+                        "Frames: " + frames +
                         "</center></html>");
 
         if (result.equalsIgnoreCase("Tiger")) {
@@ -465,6 +453,30 @@ public class DashboardPage extends JFrame {
         }
     }
 
+    // ✅ FIXED chooseAndDetect — sets detectionRunning = true before the HTTP call
+    // and detectionRunning = false AFTER the result is written to resultArea.
+    //
+    // WHAT YOU WILL SEE IN THE RESULT AREA after uploading a video:
+    //
+    // ========== DETECTION RESULT ==========
+    // Result : Tiger Detected ← or No Tiger Detected
+    // Frames Checked : 45
+    // Tiger Frames : 8
+    // Non-Tiger Frames : 37
+    // Saved Image : C:\...\saved_tigers\tiger_20260628.jpg
+    // PDF Report : C:\...\pdf_reports\report_20260628.pdf
+    // Time : 28-06-2026 10:30 PM
+    //
+    // ========== AI DECISION ==========
+    // [AI text from Ollama/Gemini here]
+    //
+    // ========== RAW SERVER RESPONSE ==========
+    // [Full JSON from Flask]
+    //
+    // ========== AI DECISION SUPPORT ==========
+    // [Second AI analysis]
+    //
+    // This result stays on screen permanently until you do another action.
     void chooseAndDetect(String action) {
         JFileChooser chooser = new JFileChooser();
         int option = chooser.showOpenDialog(this);
@@ -482,21 +494,29 @@ public class DashboardPage extends JFrame {
                 new FullScreenPreview(lastSelectedFile);
             }
 
+            // ✅ FIX: Block auto-refresh from overwriting result while processing
+            detectionRunning = true;
             resultArea.setText("Processing...\nPlease wait. Detection is running...");
 
             new Thread(() -> {
                 String response = ApiClient.sendFile(action, lastSelectedFile);
+
+                System.out.println("=== RAW RESPONSE ===\n" + response + "\n=== END ===");
                 String formatted = formatDetectionResult(response);
 
                 String result = extractTextValue(response, "result");
-                String notification = extractTextValue(response, "notification");
-                String aiDecision = getAIDecision(result, notification);
+                String message = extractTextValue(response, "message");
+                String aiDecision = getAIDecision(result, message);
 
                 SwingUtilities.invokeLater(() -> {
+                    // Write the result first
                     resultArea.setText(
                             formatted +
                                     "\n\n========== AI DECISION SUPPORT ==========\n\n" +
                                     aiDecision);
+
+                    // ✅ FIX: Only NOW allow auto-refresh to update the result area again
+                    detectionRunning = false;
 
                     if (isTigerDetected(response)) {
                         playAlarm();
@@ -527,20 +547,22 @@ public class DashboardPage extends JFrame {
 
     String formatDetectionResult(String response) {
         String result = extractTextValue(response, "result");
-        String notification = extractTextValue(response, "notification");
+        String message = extractTextValue(response, "message");
         String frames = extractValue(response, "frames_checked");
         String tigerFrames = extractValue(response, "tiger_frames");
         String nonTigerFrames = extractValue(response, "nontiger_frames");
         String savedImage = extractTextValue(response, "saved_image");
         String pdf = extractTextValue(response, "pdf_report");
+        String aiDecisionText = extractTextValue(response, "ai_decision");
+        String time = extractTextValue(response, "time");
 
         String text = "========== DETECTION RESULT ==========\n\n";
 
-        if (!notification.equals(""))
-            text += "Notification : " + notification + "\n";
+        if (!message.equals(""))
+            text += "Message        : " + message + "\n";
 
         if (!result.equals(""))
-            text += "Result       : " + result + "\n";
+            text += "Result         : " + result + "\n";
 
         if (!frames.equals("0"))
             text += "Frames Checked : " + frames + "\n";
@@ -552,10 +574,16 @@ public class DashboardPage extends JFrame {
             text += "Non-Tiger Frames : " + nonTigerFrames + "\n";
 
         if (!savedImage.equals(""))
-            text += "Saved Image  : " + savedImage + "\n";
+            text += "Saved Image    : " + savedImage + "\n";
 
         if (!pdf.equals(""))
-            text += "PDF Report   : " + pdf + "\n";
+            text += "PDF Report     : " + pdf + "\n";
+
+        if (!time.equals(""))
+            text += "Time           : " + time + "\n";
+
+        if (!aiDecisionText.equals(""))
+            text += "\n========== AI DECISION ==========\n" + aiDecisionText + "\n";
 
         text += "\n========== RAW SERVER RESPONSE ==========\n";
         text += formatJson(response);
@@ -570,27 +598,13 @@ public class DashboardPage extends JFrame {
             return false;
         }
 
-        if (text.contains("result:tiger")) {
+        if (text.contains("\"result\":\"tiger detected\"") ||
+                text.contains("\"result\": \"tiger detected\"")) {
             return true;
         }
 
-        if (text.contains("\"result\":\"tiger\"")) {
-            return true;
-        }
-
-        if (text.contains("\"result\": \"tiger\"")) {
-            return true;
-        }
-
-        if (text.contains("notification:tiger detected")) {
-            return true;
-        }
-
-        if (text.contains("tiger detected in photo")) {
-            return true;
-        }
-
-        if (text.contains("tiger detected in video")) {
+        if (text.contains("\"result\":\"tiger\"") ||
+                text.contains("\"result\": \"tiger\"")) {
             return true;
         }
 
@@ -598,8 +612,13 @@ public class DashboardPage extends JFrame {
             return true;
         }
 
-        if (text.contains("tiger_frames") && !text.contains("tiger_frames: 0")) {
-            return true;
+        try {
+            String tigerFramesVal = extractValue(response, "tiger_frames");
+            int tigerFrames = Integer.parseInt(tigerFramesVal.trim());
+            if (tigerFrames > 0) {
+                return true;
+            }
+        } catch (Exception ignored) {
         }
 
         return false;
@@ -624,7 +643,6 @@ public class DashboardPage extends JFrame {
         new Thread(() -> {
             for (int i = 0; i < 3; i++) {
                 Toolkit.getDefaultToolkit().beep();
-
                 try {
                     Thread.sleep(300);
                 } catch (Exception ignored) {

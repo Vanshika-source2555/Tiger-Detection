@@ -1,5 +1,6 @@
 import javax.swing.*;
 import java.awt.*;
+import java.io.File;
 
 public class AIAssistantPage extends JDialog {
 
@@ -7,6 +8,7 @@ public class AIAssistantPage extends JDialog {
     JScrollPane scrollPane;
     JTextField questionField;
     DashboardPage dashboard;
+    File selectedFile;
 
     public AIAssistantPage(DashboardPage parent) {
 
@@ -35,8 +37,15 @@ public class AIAssistantPage extends JDialog {
         scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         add(scrollPane);
 
+        JButton uploadButton = new JButton("+");
+        uploadButton.setBounds(20, 620, 45, 45);
+        uploadButton.setFont(new Font("Segoe UI", Font.BOLD, 22));
+        add(uploadButton);
+
+        uploadButton.addActionListener(e -> uploadFile());
+
         questionField = new JTextField();
-        questionField.setBounds(20, 625, 315, 45);
+        questionField.setBounds(75, 615, 260, 55);
         questionField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         questionField.setBorder(BorderFactory.createLineBorder(new Color(190, 200, 210), 1));
         add(questionField);
@@ -130,5 +139,21 @@ public class AIAssistantPage extends JDialog {
             JScrollBar bar = scrollPane.getVerticalScrollBar();
             bar.setValue(bar.getMaximum());
         });
+    }
+
+    void uploadFile() {
+
+        JFileChooser chooser = new JFileChooser();
+
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION)
+            return;
+
+        selectedFile = chooser.getSelectedFile();
+
+        questionField.setText("📎 " + selectedFile.getName() + " ");
+
+        questionField.requestFocus();
+
+        questionField.setCaretPosition(questionField.getText().length());
     }
 }

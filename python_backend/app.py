@@ -3,8 +3,12 @@ import os
 import cv2
 import numpy as np
 from datetime import datetime
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import warnings
+from wildlife_agent import run_wildlife_agent
+
 warnings.filterwarnings("ignore")
 from reportlab.pdfgen import canvas
 
@@ -14,7 +18,9 @@ from predict import predict_image
 from ai_assistant import (
     ai_chat_answer,
     ai_decision_support,
-    generate_camera_ai_summary
+    generate_camera_ai_summary,
+    generate_photo_detection_analysis,
+    generate_video_detection_analysis
 )
 
 try:
@@ -307,10 +313,33 @@ def api():
         file.save(file_path)
 
         output = process_detection(file_path)
+
         saved_path = ""
 
         if output["result"] == "Tiger Detected":
             saved_path = save_tiger_image(file_path)
+
+        camera_id = request.form.get("camera_id", "CAM_1")
+
+        # FIX: wrap in try/except so agent crash never kills the response
+        try:
+            agent_result = run_wildlife_agent(
+                source_type="Photo",
+                result=output["result"],
+                message=output["message"],
+                file_name=file.filename,
+                image_path=saved_path,
+                camera_id=camera_id
+            )
+            # FIX: use correct keys returned by run_wildlife_agent
+            output["agent_plan"] = agent_result.get("summary", "")
+            output["agent_execution"] = agent_result.get("full_report", "")
+            output["ai_report"] = agent_result.get("ai_summary", "")
+        except Exception as e:
+            print("Agent error (photo):", e)
+            output["agent_plan"] = ""
+            output["agent_execution"] = ""
+            output["ai_report"] = ""
 
         ai_text = ai_decision_support(
             output["result"],
@@ -365,11 +394,11 @@ def api():
             if frame_count <= 10 or frame_count % 5 == 0:
                 checked_frames += 1
 
-                # Same logic as camera: full frame + multi-crop detection
                 result = final_tiger_detection(frame, "VIDEO")
                 print("VIDEO FRAME RESULT:", result)
 
-                if result == "Tiger":
+                # FIX: accept both "Tiger" and "Tiger Detected" from final_tiger_detection
+                if result == "Tiger" or result == "Tiger Detected":
                     tiger_frames += 1
                     tiger_detected_once = True
                     last_result = "Tiger Detected"
@@ -416,6 +445,29 @@ def api():
             nontiger_frames
         )
 
+        # FIX: run wildlife agent for video (was completely missing before)
+        agent_summary = ""
+        agent_full_report = ""
+        agent_ai_summary = ""
+
+        try:
+            confidence_val = round((tiger_frames / checked_frames * 100), 2) if checked_frames > 0 else 0
+            agent_result = run_wildlife_agent(
+                source_type="Video",
+                result=final_result,
+                file_name=file.filename,
+                image_path=best_frame_path,
+                frames_checked=checked_frames,
+                tiger_frames=tiger_frames,
+                nontiger_frames=nontiger_frames,
+                confidence=confidence_val
+            )
+            agent_summary = agent_result.get("summary", "")
+            agent_full_report = agent_result.get("full_report", "")
+            agent_ai_summary = agent_result.get("ai_summary", "")
+        except Exception as e:
+            print("Agent error (video):", e)
+
         save_detection(
             username="admin",
             source_type="Video",
@@ -437,6 +489,10 @@ def api():
             "pdf_report": pdf_path,
             "ai_decision": ai_text,
             "final_report_ai": final_report_ai,
+            # FIX: these fields are now included in video response
+            "agent_plan": agent_summary,
+            "agent_execution": agent_full_report,
+            "ai_report": agent_ai_summary,
             "time": datetime.now().strftime("%d-%m-%Y %I:%M %p")
         })
 
